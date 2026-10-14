@@ -187,7 +187,8 @@ function dealRound(room: GameRoom, firstPlayerId: string) {
   room.status = "playing";
   room.currentPlayerId = firstPlayerId;
   room.turnState = "draw";
-  room.message = `${room.players.find((player) => player.id === firstPlayerId)?.name ?? "A player"} goes first. Draw a card.`;
+  // No banner: the bouncing draw-pile arrows already show who goes first.
+  room.message = "";
 }
 
 function toView(room: GameRoom, player: GamePlayer) {
@@ -517,7 +518,7 @@ router.post("/rush10/rooms/:code/action", async (req, res) => {
         player.hand.push(card);
       }
       room.turnState = "discard";
-      room.message = `${player.name} drew a card.`;
+      room.message = ""; // Drawing is shown by the card-flight animation, not a banner.
       // Never include a privately drawn card in the public animation log.
       recordEvent(room, player.id, input.action);
     } else if (input.action === "lay-phase") {

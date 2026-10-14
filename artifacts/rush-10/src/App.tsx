@@ -233,8 +233,7 @@ function RoomPage() {
   const startGame = useStartRush10Game();
   const act = useActInRush10Game();
   const room = roomQuery.data;
-  const isDrawNotification = room?.message.endsWith(' drew a card.');
-  const banner = notice || (!isDrawNotification && room?.message !== dismissedMessage ? room?.message : '');
+  const banner = notice || (room?.message !== dismissedMessage ? room?.message : '');
 
   useEffect(() => { setDismissedMessage(''); }, [room?.message]);
   useEffect(() => {
