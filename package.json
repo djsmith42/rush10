@@ -10,9 +10,6 @@
   },
   "private": true,
   "packageManager": "pnpm@10.34.6",
-  "dependencies": {
-    "@replit/connectors-sdk": "^0.4.3"
-  },
   "devDependencies": {
     "prettier": "^3.9.6",
     "typescript": "~5.9.3"

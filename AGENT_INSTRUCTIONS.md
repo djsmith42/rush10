@@ -1,4 +1,4 @@
-You are taking over maintenance of Rush 10, an existing web-based multiplayer card game originally built on Replit. Read the code before changing anything. Preserve working behavior and make targeted changes rather than redesigning or rewriting the application.
+You are taking over maintenance of Rush 10, an existing web-based multiplayer card game. Read the code before changing anything. Preserve working behavior and make targeted changes rather than redesigning or rewriting the application.
 
 Your first task is to familiarize yourself with the project, verify the local setup, and report any discrepancies or blockers. Do not automatically migrate databases, deploy, reset games, or implement speculative improvements.
 
@@ -64,7 +64,7 @@ This is a pnpm TypeScript monorepo:
 - lib/api-zod/
   Generated server request/response schemas.
 - lib/db/
-  PostgreSQL/Drizzle configuration and schema.
+  SQLite (better-sqlite3) connection and Drizzle schema.
 - artifacts/mockup-sandbox/
   Existing design-preview workspace; not the production game.
 - scripts/
@@ -101,9 +101,9 @@ Treat these as orientation pointers; confirm the actual current files and behavi
 
 PERSISTENCE AND MULTIPLAYER
 
-- Games are stored in PostgreSQL and must survive server restarts and republishing.
+- Games are stored in a SQLite file (DATABASE_PATH) and must survive server restarts and redeploys.
 - Do not introduce automatic room expiration or reset existing games without explicit permission.
-- Room mutations are applied under database row locks and committed transactionally.
+- Room mutations run inside a SQLite BEGIN IMMEDIATE transaction (write lock) and are committed before responding.
 - Preserve protection against concurrent moves, lost updates, and partial mutations.
 - The frontend polls for room updates. Do not assume WebSockets are implemented.
 - Player access uses saved browser-local session tokens, not conventional user accounts.
@@ -262,34 +262,18 @@ Orval may append a broad export from generated/api to lib/api-zod/src/index.ts.
 That can collide with generated parameter type names, notably GetRush10RoomParams.
 Preserve the curated explicit schema exports and resolve the barrel collision after generation. Do not abandon generation or patch only generated interfaces.
 
-SELF-HOSTING / EXPORT CONTEXT
+HOSTING
 
-The user requested a code export without GitHub. The ZIP contains source code and shared packages, not a ready-made production deployment.
-
-Excluded from that export:
-- Secrets and environment values
-- Database contents and existing games
-- Browser player sessions
-- node_modules and build output
-- Git history and internal agent-memory files
-
-Do not assume those omitted files are present. This prompt preserves important project history that was not bundled.
-
-The existing replit.md contains incomplete or outdated scaffold documentation. Verify claims against actual configuration; for example, the current API build produces ESM .mjs output.
-
-For standalone hosting:
-- Use a supported modern Node.js version and pnpm.
-- API runtime requires DATABASE_URL and PORT; use NODE_ENV=production.
-- Frontend Vite configuration currently requires PORT and BASE_PATH, including during builds.
-- For root-domain hosting, BASE_PATH=/.
-- Frontend output is artifacts/rush-10/dist/public.
-- API output is artifacts/api-server/dist/index.mjs with supporting build files.
-- The API does not currently serve the frontend itself.
-- Configure a production web server to serve the frontend, proxy /api to the API, and provide SPA fallback for /game/:code.
-- Remove or condition Replit-only development tooling as appropriate.
-- Configure HTTPS, process supervision, and database backups.
+Production runs at https://thesmithfam.org/rush10 behind Apache on this server:
+- Node 24 lives in /opt/node24 (the system Node is too old). pnpm 10 is pinned via packageManager.
+- API: systemd service rush10, bound to 127.0.0.1:3010, with NODE_ENV=production, PORT, HOST and DATABASE_PATH set.
+- Database: /var/lib/rush10/rush10.db, outside any web-served directory. The API creates the table on startup.
+- Frontend is built with BASE_PATH=/rush10/ and copied to /home/vhosts/thesmithfam.org/rush10; Apache provides SPA fallback.
+- Apache proxies /rush10/api to the API; plain HTTP redirects /rush10 to HTTPS.
+- Config files and the deploy script are in deploy/. Redeploy with ./deploy/deploy.sh.
+- Database backups are not yet configured.
 - Do not expose test tooling publicly without reviewing its suitability.
-- Migrating existing games requires a separate secure database export/import and a plan for browser-local player credentials.
+- Player sessions are browser-local and do not transfer between domains.
 
 WORKING STYLE
 
