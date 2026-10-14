@@ -50,11 +50,7 @@ export function TestIndexPage() {
 export function TestPlayPage() {
   const [count, setCount] = useState(() => pick(PLAYER_COUNTS));
   return <TestScenario title="Test: game in progress" scenario="play" playerCount={count}
-    controls={<label className="flex items-center gap-2">Players
-      <select value={count} onChange={e => setCount(Number(e.target.value))} data-testid="select-test-player-count" className="rounded border border-gray-500 bg-white px-2 py-1">
-        {PLAYER_COUNTS.map(n => <option key={n} value={n}>{n}</option>)}
-      </select>
-    </label>} />;
+    controls={<PlayerCountPicker value={count} onChange={setCount} />} />;
 }
 
 /** /test/end: a finished game, ended for a chosen (initially random) reason. */
@@ -62,12 +58,20 @@ export function TestEndPage() {
   const [reason, setReason] = useState<EndReason>(() => pick(END_REASONS).value);
   const [count, setCount] = useState(() => pick(PLAYER_COUNTS));
   return <TestScenario title="Test: end of game" scenario={reason} playerCount={count}
-    reseedLabel="New random end-of-game" onReseed={() => { setReason(pick(END_REASONS).value); setCount(pick(PLAYER_COUNTS)); }}
-    controls={<label className="flex items-center gap-2">Ended by
+    reseedLabel="New random end-of-game" onReseed={() => setReason(pick(END_REASONS).value)}
+    controls={<><PlayerCountPicker value={count} onChange={setCount} /><label className="flex items-center gap-2">Ended by
       <select value={reason} onChange={e => setReason(e.target.value as EndReason)} data-testid="select-test-end-reason" className="rounded border border-gray-500 bg-white px-2 py-1">
         {END_REASONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
       </select>
-    </label>} />;
+    </label></>} />;
+}
+
+function PlayerCountPicker({ value, onChange }: { value: number; onChange: (count: number) => void }) {
+  return <label className="flex items-center gap-2">Players
+    <select value={value} onChange={e => onChange(Number(e.target.value))} data-testid="select-test-player-count" className="rounded border border-gray-500 bg-white px-2 py-1">
+      {PLAYER_COUNTS.map(n => <option key={n} value={n}>{n}</option>)}
+    </select>
+  </label>;
 }
 
 /** Each scenario is a brand-new seeded room; every seat belongs to this page, never to a real game. */

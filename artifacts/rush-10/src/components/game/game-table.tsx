@@ -12,6 +12,7 @@ import { MeldSpread, OpponentSeat, SeatIdentity } from '@/components/game/seat';
 import { EventFlights, isParkedEvent, useTableEvents, type ParkedDrop } from '@/components/game/event-flights';
 import { SkipSplash } from '@/components/game/skip-splash';
 import { ExitConfirm } from '@/components/game/exit-confirm';
+import { ConfettiBurst } from '@/components/game/confetti-burst';
 
 type Extra = Partial<Omit<Rush10PlayerAction, 'playerToken' | 'action'>>;
 export type Perform = (action: Rush10PlayerAction['action'], extra?: Extra, onDone?: (updated: Rush10RoomView) => void, onError?: () => void) => void;
@@ -343,6 +344,7 @@ function Results({ room, selfId, isFinished, headingRef }: { room: Rush10RoomVie
     ? `${endedByName} left the game, so the game is over.`
     : `${endedByName} completed Level 10 and won the game!`;
   const zoom = { initial: reduce ? false as const : { opacity: 0, scale: 3.2 }, animate: { opacity: 1, scale: 1 }, transition: { duration: reduce ? 0 : 0.9, ease: EASE } };
+  const celebrate = (id: string) => isFinished && id === room.winnerId;
   return <div className="text-center" data-testid="round-results">
     <motion.div ref={headingRef} tabIndex={-1} id="round-results-heading" className="outline-none" {...zoom}>
     {isFinished ? <>
@@ -359,9 +361,9 @@ function Results({ room, selfId, isFinished, headingRef }: { room: Rush10RoomVie
       {ranked.map((p, i) => <motion.li key={p.id} initial={reduce ? false : { opacity: 0, x: -14 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 + i * 0.07, ease: EASE }}
         className={`flex items-center gap-3 px-2 py-2.5 text-left ${p.id === room.winnerId ? 'text-[#A3E635]' : ''}`} data-testid={`result-row-${p.id}`}>
         <AnimalAvatar kind={p.avatar} size={34} />
-        <span className="min-w-0 flex-1"><span className="block truncate font-bold">{p.name}{p.id === selfId && <span className="ml-1.5 text-[10px] font-medium text-[#94A3B8]">(you)</span>}{p.id === room.winnerId && <Crown size={13} className="ml-1.5 inline text-[#FFB800]" aria-label="Winner" />}{room.endReason === 'player-left' && p.id === room.endedByPlayerId && <span className="ml-1.5 text-[10px] font-medium text-[#FDA4AF]">(left)</span>}</span>
+        <span className="relative min-w-0 flex-1">{celebrate(p.id) && <ConfettiBurst direction="left" className="top-3" />}<span className="block truncate font-bold">{p.name}{p.id === selfId && <span className="ml-1.5 text-[10px] font-medium text-[#94A3B8]">(you)</span>}{p.id === room.winnerId && <Crown size={13} className="ml-1.5 inline text-[#FFB800]" aria-label="Winner" />}{room.endReason === 'player-left' && p.id === room.endedByPlayerId && <span className="ml-1.5 text-[10px] font-medium text-[#FDA4AF]">(left)</span>}</span>
           <span className="text-[11px] text-[#94A3B8]">Level {p.phase}{p.hasLaidPhase ? ' · level laid' : ''}</span></span>
-        <span className={`font-mono font-bold ${i === 0 ? 'text-[27px] text-[#FFB800]' : 'text-lg'}`}>{p.score}</span>
+        <span className={`relative font-mono font-bold ${i === 0 ? 'text-[27px] text-[#FFB800]' : 'text-lg'}`}>{p.score}{celebrate(p.id) && <ConfettiBurst direction="right" />}</span>
       </motion.li>)}
     </ul>
   </div>;
