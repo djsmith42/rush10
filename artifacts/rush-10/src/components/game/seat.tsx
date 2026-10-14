@@ -26,7 +26,7 @@ export function MeldSpread({ meld, ownerName, canHit, onHit, fresh, incoming }: 
     <span className="relative block" style={{ width, height: Math.round((cardWidth - 4) * 122 / 79 + 4) }}>
       {/* Cards still flying in from a hit stay hidden (but measurable as the flight target) until they land. */}
       {laidCardOrder(meld).map((card, i) => <motion.span key={card.id} className={`meld-card absolute top-0 block ${incoming?.has(card.id) ? 'opacity-0' : ''}`} data-meld-card={card.id}
-        style={{ left: i * step, zIndex: card.type === 'wild' ? i + 1 : meld.cards.length + i + 1 }}
+        style={{ left: i * step, zIndex: i + 1 }}
         initial={fresh && !reduce ? { opacity: 0, y: -26, rotateY: 90, scale: 0.7 } : false}
         animate={{ opacity: 1, y: 0, rotateY: 0, scale: 1 }}
         transition={{ delay: 0.25 + i * 0.07, type: 'spring', stiffness: 320, damping: 22 }}>
