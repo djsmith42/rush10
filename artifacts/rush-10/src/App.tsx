@@ -4,7 +4,7 @@ import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
-import TestGamePage from '@/pages/test-game';
+import { TestEndPage, TestIndexPage, TestPlayPage } from '@/pages/test-scenario';
 import { Redirect, Route, Switch, useLocation, useRoute, Router as WouterRouter } from 'wouter';
 import {
   useGetRush10Rules,
@@ -52,7 +52,10 @@ function AppRouter() {
     <ErrorBoundary resetKey={window.location.pathname}>
       <Switch>
         <Route path="/" component={HomePage} />
-        <Route path="/test-game" component={TestGamePage} />
+        <Route path="/test" component={TestIndexPage} />
+        <Route path="/test/play" component={TestPlayPage} />
+        <Route path="/test/end" component={TestEndPage} />
+        <Route path="/test-game"><Redirect to="/test" replace /></Route>
         <Route path="/game/:code" component={RoomPage} />
         <Route path="/room/:code">{params => <Redirect to={`/game/${params.code}`} replace />}</Route>
         <Route component={NotFound} />
@@ -230,7 +233,7 @@ function RoomPage() {
   const token = session?.roomCode.toUpperCase() === code ? session.playerToken : '';
   const roomKey = roomQueryKey(code, session?.playerId);
   const roomQuery = useGetRush10Room(code, {
-    query: { enabled: !!code && !!token, queryKey: roomKey, refetchInterval: 1200 },
+    query: { enabled: !!code && !!token, queryKey: roomKey, refetchInterval: 900 },
     request: playerAuth(token),
   });
   const startGame = useStartRush10Game();
@@ -338,7 +341,7 @@ function RoomPage() {
 
   if (room.status !== 'waiting') return (
     <main className="page-shell" style={{ '--paper': '#111827' } as CSSProperties}>
-      {(room.status !== 'round-over' || notice) && bannerEl}
+      {((room.status !== 'round-over' && room.status !== 'finished') || notice) && bannerEl}
       <div className="page-content">
         <GameTable room={room} code={code} selfId={selfId} rules={rulesQuery.data} rulesLoading={rulesQuery.isLoading} retryRules={() => rulesQuery.refetch()}
           perform={perform} start={start} isBusy={isBusy} actPending={act.isPending} startPending={startGame.isPending} onExit={() => navigate('/')} />

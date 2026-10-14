@@ -25,7 +25,7 @@ export function SkipSplash({ room }: { room: Rush10RoomView }) {
   }, [announcement]);
 
   if (!announcement) return null;
-  return <div className="pointer-events-none fixed inset-0 z-[150] flex items-center justify-center px-5" role="status" aria-live="polite" data-testid="skip-announcement">
+  return <div className="pointer-events-none fixed inset-0 z-[150] flex -translate-y-[20vh] items-center justify-center px-5" role="status" aria-live="polite" data-testid="skip-announcement">
     <motion.div key={announcement.id}
       initial={reduce ? false : { opacity: 0, scale: 1.35, rotate: -3 }}
       animate={{ opacity: 1, scale: 1, rotate: 0 }}

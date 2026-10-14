@@ -5,6 +5,8 @@ export {
   createRush10RoomBodyPlayerNameMax,
   CreateRush10RoomBody,
   CreateRush10RoomResponse,
+  CreateRush10TestRoomBody,
+  CreateRush10TestRoomResponse,
   JoinRush10RoomParams,
   joinRush10RoomBodyPlayerNameMax,
   JoinRush10RoomBody,

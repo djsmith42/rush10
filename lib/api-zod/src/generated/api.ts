@@ -107,8 +107,34 @@ export const CreateRush10RoomResponse = zod.object({
 })),
   "roundNumber": zod.number().int(),
   "message": zod.string(),
-  "winnerId": zod.string().nullable()
+  "winnerId": zod.string().nullable(),
+  "endReason": zod.union([zod.enum(['level-10', 'player-left']),zod.null()]).describe('Why a finished game ended; null until it does.'),
+  "endedByPlayerId": zod.string().nullable().describe('The Level 10 winner, or the player who left.')
 })
+})
+
+
+/**
+ * Builds a brand-new room at random levels and scores for the test pages. It never touches an existing room, and every seat token is returned to the caller, so no one else can sit in it.
+ * @summary Create a seeded test room whose seats all belong to the caller
+ */
+export const createRush10TestRoomBodyPlayerCountMin = 2;
+export const createRush10TestRoomBodyPlayerCountMax = 6;
+
+
+
+export const CreateRush10TestRoomBody = zod.object({
+  "scenario": zod.enum(['play', 'level-10', 'player-left']),
+  "playerCount": zod.number().int().min(createRush10TestRoomBodyPlayerCountMin).max(createRush10TestRoomBodyPlayerCountMax)
+})
+
+export const CreateRush10TestRoomResponse = zod.object({
+  "roomCode": zod.string(),
+  "sessions": zod.array(zod.object({
+  "playerId": zod.string(),
+  "playerToken": zod.string(),
+  "name": zod.string()
+}))
 })
 
 
@@ -192,7 +218,9 @@ export const JoinRush10RoomResponse = zod.object({
 })),
   "roundNumber": zod.number().int(),
   "message": zod.string(),
-  "winnerId": zod.string().nullable()
+  "winnerId": zod.string().nullable(),
+  "endReason": zod.union([zod.enum(['level-10', 'player-left']),zod.null()]).describe('Why a finished game ended; null until it does.'),
+  "endedByPlayerId": zod.string().nullable().describe('The Level 10 winner, or the player who left.')
 })
 })
 
@@ -266,7 +294,9 @@ export const GetRush10RoomResponse = zod.object({
 })),
   "roundNumber": zod.number().int(),
   "message": zod.string(),
-  "winnerId": zod.string().nullable()
+  "winnerId": zod.string().nullable(),
+  "endReason": zod.union([zod.enum(['level-10', 'player-left']),zod.null()]).describe('Why a finished game ended; null until it does.'),
+  "endedByPlayerId": zod.string().nullable().describe('The Level 10 winner, or the player who left.')
 })
 
 
@@ -342,7 +372,9 @@ export const StartRush10GameResponse = zod.object({
 })),
   "roundNumber": zod.number().int(),
   "message": zod.string(),
-  "winnerId": zod.string().nullable()
+  "winnerId": zod.string().nullable(),
+  "endReason": zod.union([zod.enum(['level-10', 'player-left']),zod.null()]).describe('Why a finished game ended; null until it does.'),
+  "endedByPlayerId": zod.string().nullable().describe('The Level 10 winner, or the player who left.')
 })
 
 
@@ -355,7 +387,7 @@ export const ActInRush10GameParams = zod.object({
 
 export const ActInRush10GameBody = zod.object({
   "playerToken": zod.string(),
-  "action": zod.enum(['draw-deck', 'draw-discard', 'lay-phase', 'hit', 'discard', 'set-avatar']),
+  "action": zod.enum(['draw-deck', 'draw-discard', 'lay-phase', 'hit', 'discard', 'set-avatar', 'leave']),
   "avatar": zod.enum(['fox', 'cat', 'bear', 'rabbit', 'owl', 'panda', 'frog', 'penguin']).optional(),
   "cardIds": zod.array(zod.string()).optional(),
   "melds": zod.array(zod.object({
@@ -431,7 +463,9 @@ export const ActInRush10GameResponse = zod.object({
 })),
   "roundNumber": zod.number().int(),
   "message": zod.string(),
-  "winnerId": zod.string().nullable()
+  "winnerId": zod.string().nullable(),
+  "endReason": zod.union([zod.enum(['level-10', 'player-left']),zod.null()]).describe('Why a finished game ended; null until it does.'),
+  "endedByPlayerId": zod.string().nullable().describe('The Level 10 winner, or the player who left.')
 })
 
 

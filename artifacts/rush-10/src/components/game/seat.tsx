@@ -62,7 +62,9 @@ export function OpponentSeat({ player, active, melds, canHit, onHit, freshMelds,
   const step = n > 1 ? Math.min(12, 120 / (n - 1)) : 0;
   const maxAngle = Math.min(26, n * 2.6);
   const fanW = backW + step * Math.max(0, n - 1);
-  return <div className="flex min-w-[168px] flex-1 flex-col items-center gap-2 px-2" data-testid={`seat-${player.id}`}>
+  // Sized to its own content, not an equal share of the row; on narrow windows its melds wrap to a second
+  // line before the row has to scroll.
+  return <div className="flex min-w-[120px] flex-col items-center gap-2 px-1 md:px-2" data-testid={`seat-${player.id}`}>
     <SeatIdentity player={player} active={active} size={36} />
     <div className="relative" style={{ width: Math.max(fanW, 40), height: 58 }} data-seat-hand={player.id} aria-label={`${player.name} holds ${n} card${n === 1 ? '' : 's'}`} role="img">
       {Array.from({ length: n }, (_, i) => {

@@ -146,6 +146,17 @@ export interface Rush10Meld {
   high: number | null;
 }
 
+/**
+ * Why a finished game ended; null until it does.
+ */
+export type Rush10RoomViewEndReason = typeof Rush10RoomViewEndReason[keyof typeof Rush10RoomViewEndReason] | null;
+
+
+export const Rush10RoomViewEndReason = {
+  'level-10': 'level-10',
+  'player-left': 'player-left',
+} as const;
+
 export interface Rush10RoomView {
   events?: Rush10GameEvent[];
   roomCode: string;
@@ -164,6 +175,13 @@ export interface Rush10RoomView {
   message: string;
   /** @nullable */
   winnerId: string | null;
+  /** Why a finished game ended; null until it does. */
+  endReason: Rush10RoomViewEndReason;
+  /**
+     * The Level 10 winner, or the player who left.
+     * @nullable
+     */
+  endedByPlayerId: string | null;
 }
 
 export interface Rush10RoomSession {
@@ -183,6 +201,7 @@ export const Rush10PlayerActionAction = {
   hit: 'hit',
   discard: 'discard',
   'set-avatar': 'set-avatar',
+  leave: 'leave',
 } as const;
 
 export type Rush10PlayerActionAvatar = typeof Rush10PlayerActionAvatar[keyof typeof Rush10PlayerActionAvatar];
@@ -229,6 +248,35 @@ export interface Rush10PlayerAction {
   declaredValue?: number | null;
   /** @nullable */
   declaredColor?: string | null;
+}
+
+export type Rush10TestRoomCreateScenario = typeof Rush10TestRoomCreateScenario[keyof typeof Rush10TestRoomCreateScenario];
+
+
+export const Rush10TestRoomCreateScenario = {
+  play: 'play',
+  'level-10': 'level-10',
+  'player-left': 'player-left',
+} as const;
+
+export interface Rush10TestRoomCreate {
+  scenario: Rush10TestRoomCreateScenario;
+  /**
+     * @minimum 2
+     * @maximum 6
+     */
+  playerCount: number;
+}
+
+export interface Rush10TestSession {
+  playerId: string;
+  playerToken: string;
+  name: string;
+}
+
+export interface Rush10TestRoom {
+  roomCode: string;
+  sessions: Rush10TestSession[];
 }
 
 export interface Rush10PlayerTokenInput {

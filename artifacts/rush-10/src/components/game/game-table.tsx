@@ -2,7 +2,7 @@ import { multiHitTarget } from '@/lib/hit-target';
 import React, { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import type { Rush10Card, Rush10Meld, Rush10PlayerAction, Rush10RoomView, Rush10Rules } from '@workspace/api-client-react';
-import { ArrowDown, ArrowRight, CircleHelp, Crown, ListOrdered, LoaderCircle, Trophy, X } from 'lucide-react';
+import { ArrowDown, ArrowRight, CircleHelp, Crown, ListOrdered, LoaderCircle, LogOut, Trophy, X } from 'lucide-react';
 import { PHASE_PARTS, recognizeSelection } from '@/lib/meld-recognition';
 import { OrderedHand, type DropRect, type IncomingDraw } from '@/components/ordered-hand';
 import { CardBack, PlayingCard, cardColor, cardLabel } from '@/components/cards';
@@ -11,16 +11,17 @@ import { PlayerTile, RulesPanel } from '@/components/room-bits';
 import { MeldSpread, OpponentSeat, SeatIdentity } from '@/components/game/seat';
 import { EventFlights, isParkedEvent, useTableEvents, type ParkedDrop } from '@/components/game/event-flights';
 import { SkipSplash } from '@/components/game/skip-splash';
+import { ExitConfirm } from '@/components/game/exit-confirm';
 
 type Extra = Partial<Omit<Rush10PlayerAction, 'playerToken' | 'action'>>;
 export type Perform = (action: Rush10PlayerAction['action'], extra?: Extra, onDone?: (updated: Rush10RoomView) => void, onError?: () => void) => void;
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
-export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules, perform, start, isBusy, actPending, startPending, onExit, hideRoomCode = false }: {
+export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules, perform, start, isBusy, actPending, startPending, onExit }: {
   room: Rush10RoomView; code: string; selfId?: string;
   rules?: Rush10Rules; rulesLoading: boolean; retryRules: () => void;
-  perform: Perform; start: () => void; isBusy: boolean; actPending: boolean; startPending: boolean; onExit: () => void; hideRoomCode?: boolean;
+  perform: Perform; start: () => void; isBusy: boolean; actPending: boolean; startPending: boolean; onExit: () => void;
 }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -29,6 +30,7 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
   const [incoming, setIncoming] = useState<IncomingDraw | null>(null);
   const [parked, setParked] = useState<ParkedDrop | null>(null);
   const [drawer, setDrawer] = useState<'scores' | 'rules' | null>(null);
+  const [confirmExit, setConfirmExit] = useState(false);
   const deckRef = useRef<HTMLDivElement>(null);
   const discardRef = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
@@ -160,9 +162,17 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
   const skippedOpponent = room.players.length === 2 && lastEvent?.kind === 'discard' && lastEvent.card?.type === 'skip' && lastEvent.playerId === selfId
     ? room.players.find(player => player.id !== selfId) : undefined;
   const turnLine = !isPlaying ? null : isMyTurn
-    ? room.turnState === 'draw' ? skippedOpponent ? `it's your turn again because you skipped ${skippedOpponent.name}` : 'Your turn. Draw a card.' : 'Select cards to lay down, add to a pile, or discard to finish.'
+    ? room.turnState === 'draw' ? skippedOpponent ? `it's your turn again because you skipped ${skippedOpponent.name}` : 'Your turn. Draw a card.' : 'Finish your turn: lay cards down, add to a pile, or discard'
     : `${currentPlayer?.name ?? 'Someone'} is ${room.turnState === 'draw' ? 'drawing' : 'thinking'}`;
-  const handHint = room.turnState === 'discard' && isMyTurn && isPlaying ? 'Select matching cards, then tap a highlighted laid level to add them. Select one card to discard, or drag it to the discard pile.' : '';
+
+  // Leaving a live game ends it for everyone, so ask first; a finished game can just be left.
+  function requestExit() {
+    if (isFinished) onExit();
+    else setConfirmExit(true);
+  }
+  function leaveGame() {
+    perform('leave', {}, () => { setConfirmExit(false); onExit(); }, () => setConfirmExit(false));
+  }
 
   const over = isRoundOver || isFinished;
   const bgRef = useRef<HTMLDivElement>(null);
@@ -179,10 +189,7 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
    <div ref={bgRef} className="game-layout relative flex min-h-[100dvh] flex-col" onPointerDown={boardClick} aria-hidden={over || undefined}>
     {/* Top rail */}
     <header className="relative z-20 flex items-center justify-between gap-3 px-4 pt-3 md:px-8">
-      <div className="flex items-center gap-3">
-        <button onClick={onExit} data-testid="button-exit" className="table-chip">Exit Game</button>
-        {!hideRoomCode && <span className="hidden font-mono text-[10px] uppercase tracking-[.18em] text-[#64748B] sm:inline">Room {code}</span>}
-      </div>
+      <button onClick={requestExit} data-testid="button-exit" className="table-chip">Exit Game</button>
       <div className="flex items-center gap-1.5">
         <button onClick={() => setDrawer('scores')} data-testid="button-open-scores" className="table-chip"><ListOrdered size={13} /> Scores</button>
         <button onClick={() => setDrawer('rules')} data-testid="button-open-rules" className="table-chip"><CircleHelp size={13} /> Rules</button>
@@ -191,7 +198,8 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
 
     {/* Opponents across the top */}
     <section className="relative z-10 w-full overflow-x-auto pb-2 pt-3" aria-label="Opponents">
-      <div className="mx-auto flex w-max min-w-full justify-around gap-2 px-3">
+      {/* w-fit: as wide as the window allows, but never narrower than the seats can shrink, so the scroll bar appears only then. */}
+      <div className="mx-auto flex w-fit min-w-full justify-around gap-1 px-2 md:gap-2 md:px-3">
         {opponents.filter(p => p.id !== selfId).map(player => <OpponentSeat key={player.id} player={player}
           active={player.id === room.currentPlayerId && isPlaying}
           melds={room.melds.filter(m => m.ownerId === player.id)} canHit={canHitMeld} onHit={hit} freshMelds={freshMelds} incomingHits={incomingHits} />)}
@@ -262,14 +270,14 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
           deal={isPlaying ? [...(room.events ?? [])].reverse().find(event => event.kind === 'deal') : undefined}
           onDealingChange={setDealingHand}
           onDragCardChange={setDraggedId} onDropCards={dropCards} hiddenIds={parkedShown ? [parked!.card.id] : undefined}
-          cards={room.hand} selected={selected} toggleCard={toggleCard} color={cardColor} incoming={incoming} hint={handHint}
+          cards={room.hand} selected={selected} toggleCard={toggleCard} color={cardColor} incoming={incoming}
           locked={!isPlaying} renderAction={isPlaying && isMyTurn && room.turnState === 'discard' ? (card: Rush10Card) => <span className="flex items-center gap-1.5">{card.type === 'skip' && room.players.length > 2 && <label className="table-select"><span>Skip</span><select value={targetPlayerId} onChange={e => setTargetPlayerId(e.target.value)} onPointerDown={e => e.stopPropagation()} data-testid="select-skip-target"><option value="">Choose target</option>{room.players.filter(p => p.id !== selfId).map(p => <option value={p.id} key={p.id}>{p.name}</option>)}</select></label>}<button type="button" onClick={() => discard(card)} disabled={isBusy || needsSkipTarget(card)} data-testid="button-discard" aria-label={`Discard ${cardLabel(card)}`} className="discard-pill">{actPending ? <LoaderCircle size={13} className="animate-spin" /> : <ArrowDown size={13} />} Discard</button></span> : undefined} />
       )}
     </section>
 
    </div>
     <AnimatePresence>
-      {over && <motion.div key="round-dim" aria-hidden className="pointer-events-auto absolute inset-0 z-[80] bg-[#0B1120]/60 backdrop-blur-[3px]"
+      {over && <motion.div key="round-dim" aria-hidden className="pointer-events-auto absolute inset-0 z-[80] bg-[#0B1120]/75 backdrop-blur-[3px]"
         initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduce ? 0 : 1, ease: 'easeOut' }} />}
     </AnimatePresence>
     {over && <dialog open aria-modal="true" aria-labelledby="round-results-heading" data-testid="dialog-round-over"
@@ -283,7 +291,7 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
         else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
       }}
       className="round-results-overlay absolute inset-0 z-[85] m-0 flex h-full max-h-none w-full max-w-none flex-col items-center overflow-y-auto bg-transparent p-4 text-white">
-      <button onClick={onExit} data-testid="button-exit-overlay" className="table-chip absolute left-4 top-3 md:left-8">Exit Game</button>
+      <button onClick={requestExit} data-testid="button-exit-overlay" className="table-chip absolute left-4 top-3 md:left-8">Exit Game</button>
       <div aria-hidden className="grow" />
       <div className="w-full max-w-[840px] shrink-0">
         <Results room={room} selfId={selfId} isFinished={isFinished} headingRef={headingRef} />
@@ -293,6 +301,7 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
       </div>
       <div aria-hidden className="grow-[3]" />
     </dialog>}
+    <ExitConfirm open={confirmExit} onOpenChange={setConfirmExit} onConfirm={leaveGame} pending={actPending} />
     <EventFlights current={flights.current} advance={flights.advance} selfId={selfId} parked={parkedShown ? parked : null} />
 
     <AnimatePresence>
@@ -319,20 +328,25 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
 
 function Results({ room, selfId, isFinished, headingRef }: { room: Rush10RoomView; selfId?: string; isFinished: boolean; headingRef: React.RefObject<HTMLDivElement | null> }) {
   const reduce = useReducedMotion();
-  const winner = room.players.find(p => p.id === room.winnerId);
   const allCompleted = room.players.length > 0 && room.players.every(player => player.hasLaidPhase);
   const emptiedHand = room.players.find(player => player.handCount === 0);
   const roundReason = allCompleted
     ? 'All players completed their level.'
     : emptiedHand ? `${emptiedHand.name} played all their cards.` : '';
   const ranked = [...room.players].sort((a, b) => a.score - b.score);
+  const endedBy = room.players.find(p => p.id === room.endedByPlayerId);
+  const endedByName = endedBy ? endedBy.id === selfId ? 'You' : endedBy.name : 'A player';
+  const gameEndReason = room.endReason === 'player-left'
+    ? `${endedByName} left the game, so the game is over.`
+    : `${endedByName} completed Level 10 and won the game!`;
   const zoom = { initial: reduce ? false as const : { opacity: 0, scale: 3.2 }, animate: { opacity: 1, scale: 1 }, transition: { duration: reduce ? 0 : 0.9, ease: EASE } };
   return <div className="text-center" data-testid="round-results">
     <motion.div ref={headingRef} tabIndex={-1} id="round-results-heading" className="outline-none" {...zoom}>
     {isFinished ? <>
-      <Trophy className="mx-auto text-[#FFB800]" size={30} />
-      <h2 className="mt-2 text-4xl font-bold tracking-[-.06em] text-white md:text-5xl" data-testid="text-winner">{winner?.name ?? 'A player'} wins!</h2>
-      <p className="mt-1 text-sm text-[#94A3B8]">Ten levels, done. Final scores below.</p>
+      <p className="mx-auto mb-4 flex w-fit max-w-full items-center gap-2 rounded-full bg-[#FFB800]/15 px-4 py-2 text-sm font-bold text-[#FDE68A]" data-testid="text-game-end-reason">
+        {room.endReason === 'player-left' ? <LogOut size={15} className="shrink-0" /> : <Trophy size={15} className="shrink-0" />}{gameEndReason}
+      </p>
+      <h2 className="mt-1 text-3xl font-bold tracking-[-.05em] text-white md:text-4xl" data-testid="text-game-over">Game Over</h2>
     </> : <>
       <h2 className="mt-1 text-3xl font-bold tracking-[-.05em] text-white md:text-4xl">Round {room.roundNumber} Complete</h2>
       {roundReason && <p className="mt-3 text-sm font-semibold text-white" data-testid="text-round-end-reason">{roundReason}</p>}
@@ -342,7 +356,7 @@ function Results({ room, selfId, isFinished, headingRef }: { room: Rush10RoomVie
       {ranked.map((p, i) => <motion.li key={p.id} initial={reduce ? false : { opacity: 0, x: -14 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 + i * 0.07, ease: EASE }}
         className={`flex items-center gap-3 px-2 py-2.5 text-left ${p.id === room.winnerId ? 'text-[#A3E635]' : ''}`} data-testid={`result-row-${p.id}`}>
         <AnimalAvatar kind={p.avatar} size={34} />
-        <span className="min-w-0 flex-1"><span className="block truncate font-bold">{p.name}{p.id === selfId && <span className="ml-1.5 text-[10px] font-medium text-[#94A3B8]">(you)</span>}{p.id === room.winnerId && <Crown size={13} className="ml-1.5 inline text-[#FFB800]" aria-label="Winner" />}</span>
+        <span className="min-w-0 flex-1"><span className="block truncate font-bold">{p.name}{p.id === selfId && <span className="ml-1.5 text-[10px] font-medium text-[#94A3B8]">(you)</span>}{p.id === room.winnerId && <Crown size={13} className="ml-1.5 inline text-[#FFB800]" aria-label="Winner" />}{room.endReason === 'player-left' && p.id === room.endedByPlayerId && <span className="ml-1.5 text-[10px] font-medium text-[#FDA4AF]">(left)</span>}</span>
           <span className="text-[11px] text-[#94A3B8]">Level {p.phase}{p.hasLaidPhase ? ' · level laid' : ''}</span></span>
         <span className={`font-mono font-bold ${i === 0 ? 'text-[27px] text-[#FFB800]' : 'text-lg'}`}>{p.score}</span>
       </motion.li>)}

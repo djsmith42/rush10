@@ -4,6 +4,7 @@ import { changeStoredRoom, createStoredRoom, readStoredRoom } from "../lib/room-
 import {
   ActInRush10GameBody,
   CreateRush10RoomBody,
+  CreateRush10TestRoomBody,
   JoinRush10RoomBody,
   StartRush10GameBody,
 } from "@workspace/api-zod";
@@ -12,6 +13,7 @@ type CardColor = "red" | "blue" | "green" | "yellow";
 type CardType = "number" | "wild" | "skip";
 type MeldType = "group" | "sequence" | "color";
 type RoomStatus = "waiting" | "playing" | "round-over" | "finished";
+type EndReason = "level-10" | "player-left";
 type GameCard = {
   id: string;
   type: CardType;
@@ -61,6 +63,9 @@ type GameRoom = {
   skippedPlayerIds: Set<string>;
   message: string;
   winnerId: string | null;
+  /** Absent on rooms saved before games could end early; see `endOf`. */
+  endReason?: EndReason | null;
+  endedByPlayerId?: string | null;
   dealerIndex: number;
 };
 type PhasePart = { type: MeldType; size: number };
@@ -218,7 +223,15 @@ function toView(room: GameRoom, player: GamePlayer) {
     roundNumber: room.roundNumber,
     message: room.message,
     winnerId: room.winnerId,
+    ...endOf(room),
   };
+}
+
+/** Rooms finished before `endReason` existed could only have ended at Level 10. */
+function endOf(room: GameRoom): { endReason: EndReason | null; endedByPlayerId: string | null } {
+  if (room.status !== "finished") return { endReason: null, endedByPlayerId: null };
+  if (room.endReason) return { endReason: room.endReason, endedByPlayerId: room.endedByPlayerId ?? null };
+  return { endReason: room.winnerId ? "level-10" : null, endedByPlayerId: room.winnerId };
 }
 
 /** The poll token travels in `Authorization: Bearer`, keeping it out of URLs and access logs.
@@ -368,6 +381,8 @@ function finishRound(room: GameRoom, finisher: GamePlayer, allCompleted = false)
     finalists.sort((a, b) => a.score - b.score);
     room.winnerId = finalists[0].id;
     room.status = "finished";
+    room.endReason = "level-10";
+    room.endedByPlayerId = finalists[0].id;
     room.message = `${finalists[0].name} wins Rush 10${finalists.length > 1 ? " with the lowest score" : ""}!`;
   } else {
     room.status = "round-over";
@@ -379,6 +394,112 @@ function handleError(res: Parameters<Parameters<IRouter["get"]>[1]>[1], error: u
   const status = error instanceof GameError ? error.status : 400;
   const message = error instanceof Error ? error.message : "The game action could not be completed.";
   res.status(status).json({ error: message });
+}
+
+/** Leaving ends the game for everyone; the round in progress is not scored. */
+function endGameByLeaving(room: GameRoom, player: GamePlayer) {
+  room.status = "finished";
+  room.turnState = "waiting";
+  room.currentPlayerId = null;
+  room.skippedPlayerIds.clear();
+  room.winnerId = null;
+  room.endReason = "player-left";
+  room.endedByPlayerId = player.id;
+  room.message = `${player.name} left the game.`;
+}
+
+const TEST_NAMES = ["Ava", "Ben", "Cleo", "Dev", "Eli", "Fay"];
+const randomInt = (min: number, max: number) => min + Math.floor(Math.random() * (max - min + 1));
+
+/** Take one card matching `want` out of the draw pile, falling back to a Wild. */
+function takeFromDrawPile(room: GameRoom, want: (card: GameCard) => boolean) {
+  const candidates = room.drawPile.filter(want);
+  const card = candidates.length ? candidates[randomInt(0, candidates.length - 1)] : room.drawPile.find(c => c.type === "wild");
+  if (!card) return undefined;
+  room.drawPile = room.drawPile.filter(c => c !== card);
+  return card;
+}
+
+/** Build a legal laid-down level for `player` from the draw pile; undefined if the cards ran out. */
+function seedLaidLevel(room: GameRoom, player: GamePlayer): GameMeld[] | undefined {
+  const melds: GameMeld[] = [];
+  const usedValues = new Set<number>();
+  for (const part of PHASES[player.phase - 1].parts) {
+    let cards: Array<GameCard | undefined>;
+    let declaredValue: number | null = null;
+    let declaredColor: CardColor | null = null;
+    let low: number | null = null;
+    let high: number | null = null;
+    if (part.type === "group") {
+      // Two groups in one level read better with different numbers.
+      let value = randomInt(1, 12);
+      while (usedValues.has(value)) value = randomInt(1, 12);
+      usedValues.add(value);
+      declaredValue = value;
+      cards = Array.from({ length: part.size }, () => takeFromDrawPile(room, c => c.type === "number" && c.value === value));
+    } else if (part.type === "sequence") {
+      low = randomInt(1, 13 - part.size);
+      high = low + part.size - 1;
+      cards = Array.from({ length: part.size }, (_, i) => takeFromDrawPile(room, c => c.type === "number" && c.value === low! + i));
+    } else {
+      const color = COLORS[randomInt(0, COLORS.length - 1)];
+      declaredColor = color;
+      cards = Array.from({ length: part.size }, () => takeFromDrawPile(room, c => c.type === "number" && c.color === color));
+    }
+    if (cards.some(card => !card)) return undefined;
+    const chosen = cards as GameCard[];
+    melds.push({ id: randomUUID(), ownerId: player.id, type: part.type, cardIds: chosen.map(c => c.id), cards: chosen, declaredValue, declaredColor, low, high });
+  }
+  return melds;
+}
+
+/** Lay some players' levels mid-round. At least one player stays unlaid, or the round would end. */
+function seedLaidLevels(room: GameRoom) {
+  const order = [...room.players].sort(() => Math.random() - 0.5);
+  const layCount = randomInt(1, room.players.length - 1);
+  for (const player of order.slice(0, layCount)) {
+    const melds = seedLaidLevel(room, player);
+    if (!melds) continue;
+    room.melds.push(...melds);
+    player.hasLaidPhase = true;
+    // Laying shrinks the hand, but never to zero: an empty hand ends the round.
+    const used = melds.reduce((total, meld) => total + meld.cards.length, 0);
+    const keep = Math.max(1, player.hand.length - used);
+    room.drawPile.unshift(...player.hand.slice(keep));
+    player.hand = player.hand.slice(0, keep);
+  }
+}
+
+/** A fresh room for the test pages: random levels and scores, every seat owned by the caller. */
+function seedTestRoom(code: string, scenario: "play" | "level-10" | "player-left", playerCount: number) {
+  const avatars = [...AVATARS].sort(() => Math.random() - 0.5);
+  const players: GamePlayer[] = TEST_NAMES.slice(0, playerCount).map((name, index) => ({
+    id: randomUUID(), token: randomUUID(), name, avatar: avatars[index],
+    phase: randomInt(1, 9), score: 0, hand: [], isHost: index === 0, hasLaidPhase: false,
+  }));
+  const winner = scenario === "level-10" ? players[randomInt(0, playerCount - 1)] : undefined;
+  if (winner) winner.phase = 10;
+  else if (Math.random() < 0.3) players[randomInt(0, playerCount - 1)].phase = 10;
+  const roundNumber = Math.max(...players.map(player => player.phase)) + randomInt(0, 4);
+  for (const player of players) player.score = 5 * randomInt(roundNumber * 2, roundNumber * 10);
+  const room: GameRoom = {
+    code, status: "waiting", players, hostPlayerId: players[0].id, currentPlayerId: null, turnState: "waiting",
+    roundNumber, drawPile: [], discardPile: [], melds: [], skippedPlayerIds: new Set(), message: "",
+    winnerId: null, dealerIndex: randomInt(0, playerCount - 1),
+  };
+  dealRound(room, players[room.dealerIndex].id);
+  recordEvent(room, players[0].id, "deal");
+  if (!winner) seedLaidLevels(room);
+  if (winner) {
+    // The winner went out on Level 10; everyone else is caught holding part of their hand.
+    winner.hasLaidPhase = true;
+    winner.hand = [];
+    for (const player of players) if (player !== winner) player.hand = player.hand.slice(0, randomInt(1, 8));
+    finishRound(room, winner);
+  } else if (scenario === "player-left") {
+    endGameByLeaving(room, players[randomInt(1, playerCount - 1)]);
+  }
+  return room;
 }
 
 const router: IRouter = Router();
@@ -422,6 +543,24 @@ router.post("/rush10/rooms", async (req, res) => {
     }
     if (!saved) throw new GameError("Could not allocate a room code. Please try again.", 503);
     res.status(201).json({ roomCode: room.code, playerToken: host.token, playerId: host.id, room: toView(room, host) });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+router.post("/rush10/test-rooms", async (req, res) => {
+  try {
+    const input = CreateRush10TestRoomBody.parse(req.body);
+    let room: GameRoom | undefined;
+    for (let attempt = 0; attempt < 100 && !room; attempt += 1) {
+      const candidate = seedTestRoom(makeRoomCode(), input.scenario, input.playerCount);
+      if (await createStoredRoom(candidate)) room = candidate;
+    }
+    if (!room) throw new GameError("Could not allocate a room code. Please try again.", 503);
+    res.status(201).json({
+      roomCode: room.code,
+      sessions: room.players.map(player => ({ playerId: player.id, playerToken: player.token, name: player.name })),
+    });
   } catch (error) {
     handleError(res, error);
   }
@@ -508,6 +647,11 @@ router.post("/rush10/rooms/:code/action", async (req, res) => {
         throw new GameError("That avatar is already taken. Choose another.");
       }
       player.avatar = avatar;
+      return toView(room, player);
+    }
+    if (input.action === "leave") {
+      if (room.status === "waiting") throw new GameError("The game has not started yet.");
+      if (room.status !== "finished") endGameByLeaving(room, player);
       return toView(room, player);
     }
     assertCurrentTurn(room, player);

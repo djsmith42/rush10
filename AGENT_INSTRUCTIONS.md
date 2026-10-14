@@ -249,7 +249,7 @@ Focused scripts include:
 - node artifacts/api-server/tests/round-completion.mjs
 
 Testing cautions:
-- /test-game is a two-player testing route with a perspective-switch toolbar.
+- /test/play (game in progress, 2–6 players, random levels and scores) and /test/end (finished game, chosen end reason) are testing routes with a perspective-switch toolbar. Each seeds a brand-new room via POST /rush10/test-rooms; /test lists them; /test-game redirects to /test.
 - Never alter real player games to construct a test.
 - Some prior browser tests used mocked room/action responses to verify drag/drop UI behavior. They do not establish full end-to-end persistence correctness.
 - Some server regression tests extract and execute route logic; do not treat those as full HTTP/database integration tests.

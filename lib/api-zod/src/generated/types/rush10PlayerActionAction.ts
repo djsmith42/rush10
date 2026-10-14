@@ -16,4 +16,5 @@ export const Rush10PlayerActionAction = {
   hit: 'hit',
   discard: 'discard',
   'set-avatar': 'set-avatar',
+  leave: 'leave',
 } as const;

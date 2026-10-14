@@ -27,7 +27,9 @@ import type {
   Rush10RoomJoin,
   Rush10RoomSession,
   Rush10RoomView,
-  Rush10Rules
+  Rush10Rules,
+  Rush10TestRoom,
+  Rush10TestRoomCreate
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -298,6 +300,95 @@ export const useCreateRush10Room = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getCreateRush10RoomMutationOptions(options));
+    }
+
+export const getCreateRush10TestRoomUrl = () => {
+
+
+
+
+  return `/api/rush10/test-rooms`
+}
+
+/**
+ * Builds a brand-new room at random levels and scores for the test pages. It never touches an existing room, and every seat token is returned to the caller, so no one else can sit in it.
+ * @summary Create a seeded test room whose seats all belong to the caller
+ */
+export const createRush10TestRoom = async (rush10TestRoomCreate: Rush10TestRoomCreate, options?: Parameters<typeof customFetch>[1]): Promise<Rush10TestRoom> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<Rush10TestRoom>(getCreateRush10TestRoomUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(rush10TestRoomCreate)
+  }
+);}
+
+
+
+
+
+export const getCreateRush10TestRoomMutationKey = () => ['createRush10TestRoom'] as const;
+
+export const getCreateRush10TestRoomMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createRush10TestRoom>>, TError,CreateRush10TestRoomMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createRush10TestRoom>>, TError,CreateRush10TestRoomMutationVariables, TContext> => {
+
+const mutationKey = getCreateRush10TestRoomMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createRush10TestRoom>>, CreateRush10TestRoomMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createRush10TestRoom(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateRush10TestRoomMutationResult = NonNullable<Awaited<ReturnType<typeof createRush10TestRoom>>>
+    export type CreateRush10TestRoomMutationBody = BodyType<Rush10TestRoomCreate>
+    export type CreateRush10TestRoomMutationError = ErrorType<void>
+    export type CreateRush10TestRoomMutationVariables = {data: BodyType<Rush10TestRoomCreate>}
+
+    /**
+ * @summary Create a seeded test room whose seats all belong to the caller
+ */
+export const useCreateRush10TestRoom = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createRush10TestRoom>>, TError,CreateRush10TestRoomMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createRush10TestRoom>>,
+        TError,
+        CreateRush10TestRoomMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateRush10TestRoomMutationOptions(options));
     }
 
 export const getJoinRush10RoomUrl = (code: string,) => {

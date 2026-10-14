@@ -58,6 +58,30 @@ paths:
                 $ref: "#/components/schemas/Rush10RoomSession"
         "400":
           description: Invalid player name
+  /rush10/test-rooms:
+    post:
+      operationId: createRush10TestRoom
+      tags: [rush10]
+      summary: Create a seeded test room whose seats all belong to the caller
+      description: >-
+        Builds a brand-new room at random levels and scores for the test pages.
+        It never touches an existing room, and every seat token is returned to
+        the caller, so no one else can sit in it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Rush10TestRoomCreate"
+      responses:
+        "201":
+          description: Seeded room and one session per seat, host first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Rush10TestRoom"
+        "400":
+          description: Invalid scenario or player count
   /rush10/rooms/{code}/join:
     post:
       operationId: joinRush10Room
@@ -249,7 +273,7 @@ components:
           type: string
         action:
           type: string
-          enum: [draw-deck, draw-discard, lay-phase, hit, discard, set-avatar]
+          enum: [draw-deck, draw-discard, lay-phase, hit, discard, set-avatar, leave]
         avatar:
           type: string
           enum: [fox, cat, bear, rabbit, owl, panda, frog, penguin]
@@ -269,6 +293,37 @@ components:
           type: ["integer", "null"]
         declaredColor:
           type: ["string", "null"]
+    Rush10TestRoomCreate:
+      type: object
+      required: [scenario, playerCount]
+      properties:
+        scenario:
+          type: string
+          enum: [play, level-10, player-left]
+        playerCount:
+          type: integer
+          minimum: 2
+          maximum: 6
+    Rush10TestRoom:
+      type: object
+      required: [roomCode, sessions]
+      properties:
+        roomCode:
+          type: string
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Rush10TestSession"
+    Rush10TestSession:
+      type: object
+      required: [playerId, playerToken, name]
+      properties:
+        playerId:
+          type: string
+        playerToken:
+          type: string
+        name:
+          type: string
     Rush10PlayerTokenInput:
       type: object
       required: [playerToken]
@@ -368,6 +423,8 @@ components:
         - roundNumber
         - message
         - winnerId
+        - endReason
+        - endedByPlayerId
       properties:
         events:
           type: array
@@ -410,6 +467,15 @@ components:
         message:
           type: string
         winnerId:
+          type: ["string", "null"]
+        endReason:
+          description: Why a finished game ended; null until it does.
+          anyOf:
+            - type: string
+              enum: [level-10, player-left]
+            - type: "null"
+        endedByPlayerId:
+          description: The Level 10 winner, or the player who left.
           type: ["string", "null"]
     Rush10GameEvent:
       type: object

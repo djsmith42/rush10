@@ -9,6 +9,7 @@ import type { Rush10Card } from './rush10Card';
 import type { Rush10GameEvent } from './rush10GameEvent';
 import type { Rush10Meld } from './rush10Meld';
 import type { Rush10Player } from './rush10Player';
+import type { Rush10RoomViewEndReason } from './rush10RoomViewEndReason';
 import type { Rush10RoomViewStatus } from './rush10RoomViewStatus';
 import type { Rush10RoomViewTurnState } from './rush10RoomViewTurnState';
 
@@ -30,4 +31,11 @@ export interface Rush10RoomView {
   message: string;
   /** @nullable */
   winnerId: string | null;
+  /** Why a finished game ended; null until it does. */
+  endReason: Rush10RoomViewEndReason;
+  /**
+     * The Level 10 winner, or the player who left.
+     * @nullable
+     */
+  endedByPlayerId: string | null;
 }
