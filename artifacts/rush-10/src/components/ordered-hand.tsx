@@ -88,9 +88,9 @@ function useFan(width: number, n: number, height: number) {
   const padLeft = Math.max(edgePad, (width - total) / 2);
   const spread = Math.max(16, cw * 0.86 - step);
   const sag = n > 1 ? Math.min(30, 6 + n * 2.1) : 0;
-  // The row clips only sideways, so raised cards and the Discard button above a selected card rise
-  // over the row above instead of reserving empty space here. Extra height goes to the table's middle.
-  const topRoom = 12;
+  // Reserve room for a selected card's lift and zoom (bottom-anchored) so selecting never shifts the
+  // layout or covers the row above. The Discard button above a selected card may still rise over it.
+  const topRoom = Math.ceil(30 + ch * .13) + 8;
   return { cw, ch, step, padLeft, spread, maxAngle, sag, edgePad, topRoom };
 }
 

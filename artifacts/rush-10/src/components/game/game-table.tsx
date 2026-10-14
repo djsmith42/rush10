@@ -253,19 +253,21 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
       </div>
       {/* The hand's sort buttons share this row, so the hand needs no header row of its own. */}
       <div ref={setSortSlot} className="self-center" data-testid="hand-controls" />
+      {/* Centered on the row (not between its neighbours); on narrow screens it wraps to its own line. */}
+      <div className="order-last flex w-full justify-center empty:hidden md:pointer-events-none md:absolute md:inset-x-0 md:top-1/2 md:order-none md:-translate-y-1/2">
+        <AnimatePresence>
+          {(showRecognition || canLay) && <motion.div key="recognition" className="pointer-events-auto flex flex-wrap items-center justify-center gap-3"
+            initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={{ duration: 0.2, ease: EASE }}>
+            {showRecognition && <motion.p key={recognition.message} initial={reduce ? false : { opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} aria-live="polite" data-testid="text-meld-status" data-status={recognition.status}
+              className={`rounded-full px-3.5 py-1.5 text-center text-[13px] font-bold ${recognition.status === 'ready' ? 'bg-[#A3E635]/20 text-[#D9F99D]' : recognition.status === 'extra' ? 'bg-[#FFB800]/15 text-[#FDE68A]' : 'bg-white/[.07] text-white/85'}`}>{recognition.message}</motion.p>}
+            {canLay && <div className="relative pt-1">
+              <ArrowDown aria-hidden="true" className="pile-turn-arrow" strokeWidth={4} />
+              <button onClick={layPhase} data-testid="button-lay-phase" className="table-chip is-primary">{actPending ? <LoaderCircle size={13} className="animate-spin" /> : null} Lay Down Cards</button>
+            </div>}
+          </motion.div>}
+        </AnimatePresence>
+      </div>
     </section>
-
-    <AnimatePresence>
-      {(showRecognition || canLay) && <motion.div key="recognition" className="relative z-20 flex flex-wrap items-center justify-center gap-3 px-4 pt-2" data-keep-selection
-        initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={{ duration: 0.2, ease: EASE }}>
-        {showRecognition && <motion.p key={recognition.message} initial={reduce ? false : { opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} aria-live="polite" data-testid="text-meld-status" data-status={recognition.status}
-          className={`rounded-full px-3.5 py-1.5 text-center text-[13px] font-bold ${recognition.status === 'ready' ? 'bg-[#A3E635]/20 text-[#D9F99D]' : recognition.status === 'extra' ? 'bg-[#FFB800]/15 text-[#FDE68A]' : 'bg-white/[.07] text-white/85'}`}>{recognition.message}</motion.p>}
-        {canLay && <div className="relative pt-1">
-          <ArrowDown aria-hidden="true" className="pile-turn-arrow" strokeWidth={4} />
-          <button onClick={layPhase} data-testid="button-lay-phase" className="table-chip is-primary">{actPending ? <LoaderCircle size={13} className="animate-spin" /> : null} Lay Down Cards</button>
-        </div>}
-      </motion.div>}
-    </AnimatePresence>
 
     {/* Your hand: the lower third */}
     <section className="relative z-30 mb-3 w-full" data-self-hand data-keep-selection aria-label="Your hand">
