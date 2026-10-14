@@ -120,12 +120,9 @@ function HomePage() {
         <section className="grid items-center gap-12 pb-0 pt-0 md:grid-cols-[1.03fr_.97fr] md:gap-8">
           <div className="fade-up">
             <h1 className="max-w-[660px] text-[clamp(3.7rem,9vw,7.4rem)] font-bold leading-[.82] tracking-[-.09em] text-white">
-              RUSH 10:<span className="mt-4 block text-[clamp(2rem,4vw,3.25rem)] leading-[1.05] tracking-[-.055em] text-[#FF3366]">Race through ten levels.</span>
+              RUSH 10:
             </h1>
-            <div className="mt-8 flex flex-wrap items-center gap-3">
-              <span className="flex items-center gap-2 rounded-full border border-[#334155] bg-black/50 px-3 py-2 text-xs font-semibold text-[#94A3B8]"><Users size={15} /> 2–6 players</span>
-              <span className="rounded-full border border-[#334155] bg-black/50 px-3 py-2 font-mono text-xs text-[#94A3B8]">Free to play</span>
-            </div>
+            <p className="mt-4 text-[1.4rem] font-semibold text-[#FF3366]">A free online card game for 2–6 players</p>
           </div>
           <HeroFan />
         </section>
