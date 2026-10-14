@@ -41,6 +41,16 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, 'dist/public'),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        // Third-party code changes rarely, so separate chunks stay cached across deploys.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return;
+          if (/[\\/](framer-motion|motion-dom|motion-utils)[\\/]/.test(id)) return 'motion';
+          return 'vendor';
+        },
+      },
+    },
   },
   server: {
     port,
