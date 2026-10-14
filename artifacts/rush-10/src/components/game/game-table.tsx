@@ -108,6 +108,9 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
   const recognition = useMemo(() => recognizeSelection(selectedCards, PHASE_PARTS[self?.phase ?? 0] ?? []), [selectedCards, self?.phase]);
   const showRecognition = isPlaying && !!self && !self.hasLaidPhase && recognition.status !== 'empty';
   const canLay = isPlaying && isMyTurn && room.turnState === 'discard' && !self?.hasLaidPhase && recognition.status === 'ready' && !isBusy && !dealingHand;
+  // A ready selection always shows the button; until it can be used, say why instead of hiding it.
+  const showLay = canLay || (showRecognition && recognition.status === 'ready');
+  const layBlocker = canLay ? null : !isMyTurn ? 'Wait for your turn' : room.turnState === 'draw' ? 'Draw a card first' : null;
   function layPhase() {
     if (!canLay) return;
     act('lay-phase', { melds: recognition.melds, cardIds: recognition.melds.flatMap(m => m.cardIds) });
@@ -256,13 +259,14 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
       {/* Centered on the row (not between its neighbours); on narrow screens it wraps to its own line. */}
       <div className="order-last flex w-full justify-center empty:hidden md:pointer-events-none md:absolute md:inset-x-0 md:top-1/2 md:order-none md:-translate-y-1/2">
         <AnimatePresence>
-          {(showRecognition || canLay) && <motion.div key="recognition" className="pointer-events-auto flex flex-wrap items-center justify-center gap-3"
+          {(showRecognition || showLay) && <motion.div key="recognition" className="pointer-events-auto flex flex-wrap items-center justify-center gap-3"
             initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={{ duration: 0.2, ease: EASE }}>
             {showRecognition && <motion.p key={recognition.message} initial={reduce ? false : { opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} aria-live="polite" data-testid="text-meld-status" data-status={recognition.status}
               className={`rounded-full px-3.5 py-1.5 text-center text-[13px] font-bold ${recognition.status === 'ready' ? 'bg-[#A3E635]/20 text-[#D9F99D]' : recognition.status === 'extra' ? 'bg-[#FFB800]/15 text-[#FDE68A]' : 'bg-white/[.07] text-white/85'}`}>{recognition.message}</motion.p>}
-            {canLay && <div className="relative pt-1">
-              <ArrowDown aria-hidden="true" className="pile-turn-arrow" strokeWidth={4} />
-              <button onClick={layPhase} data-testid="button-lay-phase" className="table-chip is-primary">{actPending ? <LoaderCircle size={13} className="animate-spin" /> : null} Lay Down Cards</button>
+            {showLay && <div className="relative flex items-center gap-2 pt-1">
+              {canLay && <ArrowDown aria-hidden="true" className="pile-turn-arrow" strokeWidth={4} />}
+              <button onClick={layPhase} disabled={!canLay} data-testid="button-lay-phase" className="table-chip is-primary">{actPending ? <LoaderCircle size={13} className="animate-spin" /> : null} Lay Down Cards</button>
+              {layBlocker && <span className="text-[12px] font-semibold text-white/70" data-testid="text-lay-blocker">{layBlocker}</span>}
             </div>}
           </motion.div>}
         </AnimatePresence>
