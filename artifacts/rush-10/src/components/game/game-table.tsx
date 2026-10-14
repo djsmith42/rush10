@@ -55,6 +55,7 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
   }, [room.roundNumber, room.status]);
 
   // A dropped card stays parked until its flight lands; it leaves the hand when the server confirms.
+  const incomingHits = new Set(flights.pending.flatMap(event => event.kind === 'hit' && event.card ? [event.card.id] : []));
   const parkedShown = !!parked && (room.hand.some(card => card.id === parked.card.id) || flights.pending.some(event => isParkedEvent(event, parked, selfId)));
   useEffect(() => { if (parked && !parkedShown) setParked(null); }, [parked, parkedShown]);
 
@@ -193,7 +194,7 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
       <div className="mx-auto flex w-max min-w-full justify-around gap-2 px-3">
         {opponents.filter(p => p.id !== selfId).map(player => <OpponentSeat key={player.id} player={player}
           active={player.id === room.currentPlayerId && isPlaying}
-          melds={room.melds.filter(m => m.ownerId === player.id)} canHit={canHitMeld} onHit={hit} freshMelds={freshMelds} />)}
+          melds={room.melds.filter(m => m.ownerId === player.id)} canHit={canHitMeld} onHit={hit} freshMelds={freshMelds} incomingHits={incomingHits} />)}
       </div>
     </section>
 
@@ -238,7 +239,7 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
         <SeatIdentity player={self} active={isMyTurn && isPlaying} align="left" levelTitle={levelTitle(self.phase)} size={80} localPlayer />
       </div>}
       <div className="flex flex-1 flex-wrap justify-center gap-1" data-meld-zone={selfId}>
-        {myMelds.map(meld => <MeldSpread key={meld.id} meld={meld} ownerName="your" canHit={canHitMeld(meld)} onHit={() => hit(meld)} fresh={freshMelds.has(meld.id)} />)}
+        {myMelds.map(meld => <MeldSpread key={meld.id} meld={meld} ownerName="your" canHit={canHitMeld(meld)} onHit={() => hit(meld)} fresh={freshMelds.has(meld.id)} incoming={incomingHits} />)}
       </div>
     </section>
 

@@ -12,7 +12,7 @@ export function meldTitle(meld: Rush10Meld) {
 }
 
 /** A laid Group/Sequence: the whole spread is the hit target. */
-export function MeldSpread({ meld, ownerName, canHit, onHit, fresh }: { meld: Rush10Meld; ownerName: string; canHit: boolean; onHit: () => void; fresh: boolean }) {
+export function MeldSpread({ meld, ownerName, canHit, onHit, fresh, incoming }: { meld: Rush10Meld; ownerName: string; canHit: boolean; onHit: () => void; fresh: boolean; incoming?: Set<string> }) {
   const cardWidth = 62.5;
   const reduce = useReducedMotion();
   const step = Math.max(18, Math.min(cardWidth * 0.5, 150 / Math.max(1, meld.cards.length - 1)));
@@ -24,7 +24,8 @@ export function MeldSpread({ meld, ownerName, canHit, onHit, fresh }: { meld: Ru
       {canHit && <Plus size={10} strokeWidth={3} />}{meldTitle(meld)}
     </span>
     <span className="relative block" style={{ width, height: Math.round((cardWidth - 4) * 122 / 79 + 4) }}>
-      {laidCardOrder(meld).map((card, i) => <motion.span key={card.id} className="meld-card absolute top-0 block" data-meld-card={card.id}
+      {/* Cards still flying in from a hit stay hidden (but measurable as the flight target) until they land. */}
+      {laidCardOrder(meld).map((card, i) => <motion.span key={card.id} className={`meld-card absolute top-0 block ${incoming?.has(card.id) ? 'opacity-0' : ''}`} data-meld-card={card.id}
         style={{ left: i * step, zIndex: card.type === 'wild' ? i + 1 : meld.cards.length + i + 1 }}
         initial={fresh && !reduce ? { opacity: 0, y: -26, rotateY: 90, scale: 0.7 } : false}
         animate={{ opacity: 1, y: 0, rotateY: 0, scale: 1 }}
@@ -54,7 +55,7 @@ export function SeatIdentity({ player, active, align = 'center', levelTitle, siz
 }
 
 /** Opponent: identity, a face-down fan sized to their hand count, and their laid melds. */
-export function OpponentSeat({ player, active, melds, canHit, onHit, freshMelds }: { player: Rush10Player; active: boolean; melds: Rush10Meld[]; canHit: (meld: Rush10Meld) => boolean; onHit: (meld: Rush10Meld) => void; freshMelds: Set<string> }) {
+export function OpponentSeat({ player, active, melds, canHit, onHit, freshMelds, incomingHits }: { player: Rush10Player; active: boolean; melds: Rush10Meld[]; canHit: (meld: Rush10Meld) => boolean; onHit: (meld: Rush10Meld) => void; freshMelds: Set<string>; incomingHits?: Set<string> }) {
   const reduce = useReducedMotion();
   const n = player.handCount;
   const backW = 30;
@@ -75,7 +76,7 @@ export function OpponentSeat({ player, active, melds, canHit, onHit, freshMelds 
       <span className="absolute -bottom-1 -right-4 rounded-full bg-[#0F172A] px-1.5 py-0.5 font-mono text-[9px] text-[#CBD5E1] ring-1 ring-white/10">{n}</span>
     </div>
     <div className="flex min-h-[8px] flex-wrap justify-center gap-1" data-meld-zone={player.id}>
-      {melds.map(meld => <MeldSpread key={meld.id} meld={meld} ownerName={player.name} canHit={canHit(meld)} onHit={() => onHit(meld)} fresh={freshMelds.has(meld.id)} />)}
+      {melds.map(meld => <MeldSpread key={meld.id} meld={meld} ownerName={player.name} canHit={canHit(meld)} onHit={() => onHit(meld)} fresh={freshMelds.has(meld.id)} incoming={incomingHits} />)}
     </div>
   </div>;
 }
