@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
 import {
@@ -93,6 +93,17 @@ function TestScenario({ title, scenario, playerCount, controls, reseedLabel = 'N
   });
   const rules = useGetRush10Rules();
 
+  // The table fills the window below the toolbar, whose height changes as it wraps.
+  const pageRef = useRef<HTMLDivElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const toolbar = toolbarRef.current;
+    if (!toolbar) return;
+    const observer = new ResizeObserver(() => pageRef.current?.style.setProperty('--test-toolbar-h', `${toolbar.offsetHeight}px`));
+    observer.observe(toolbar);
+    return () => observer.disconnect();
+  }, []);
+
   useEffect(() => {
     let current = true;
     setLoading(true);
@@ -127,8 +138,8 @@ function TestScenario({ title, scenario, playerCount, controls, reseedLabel = 'N
     finally { setBusy(false); }
   }
 
-  return <div className="test-game-page">
-    <div role="toolbar" aria-label="Test game controls" className="sticky top-0 z-[200] flex flex-wrap items-center gap-3 border-b border-gray-400 bg-gray-100 px-4 py-3 font-sans text-sm text-gray-900">
+  return <div ref={pageRef} className="test-game-page">
+    <div ref={toolbarRef} role="toolbar" aria-label="Test game controls" className="sticky top-0 z-[200] flex flex-wrap items-center gap-3 border-b border-gray-400 bg-gray-100 px-4 py-3 font-sans text-sm text-gray-900">
       <strong>{title}</strong>
       {controls}
       <button onClick={() => { onReseed?.(); setReseed(n => n + 1); }} disabled={loading || busy} data-testid="button-test-reseed" className="rounded border border-gray-500 bg-white px-3 py-1.5 disabled:opacity-50">{reseedLabel}</button>

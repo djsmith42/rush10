@@ -52,7 +52,6 @@ function moveToIndex(order: string[], id: string, index: number) {
 
 const ACTIVATION_PX = 6;
 const EDGE_PAD = 18;
-const TOP_ROOM = 84;
 const EASE = [0.22, 1, 0.36, 1] as const;
 
 /** On-screen rect of the dragged card where it was released. */
@@ -89,10 +88,13 @@ function useFan(width: number, n: number, height: number) {
   const padLeft = Math.max(edgePad, (width - total) / 2);
   const spread = Math.max(16, cw * 0.86 - step);
   const sag = n > 1 ? Math.min(30, 6 + n * 2.1) : 0;
-  return { cw, ch, step, padLeft, spread, maxAngle, sag, edgePad };
+  // The row clips only sideways, so raised cards and the Discard button above a selected card rise
+  // over the row above instead of reserving empty space here. Extra height goes to the table's middle.
+  const topRoom = 12;
+  return { cw, ch, step, padLeft, spread, maxAngle, sag, edgePad, topRoom };
 }
 
-export function OrderedHand({ cards, storageKey, selected, toggleCard, color, incoming, renderAction, headerExtra, hint, deal, onDealingChange, onDragCardChange, onDropCards, hiddenIds, locked = false }: {
+export function OrderedHand({ cards, storageKey, selected, toggleCard, color, incoming, renderAction, headerExtra, controlsSlot, deal, onDealingChange, onDragCardChange, onDropCards, hiddenIds, locked = false }: {
   onDragCardChange?: (id: string | null) => void;
   onDropCards?: (id: string, x: number, y: number, rect: DropRect) => boolean;
   /** Cards still in hand but drawn elsewhere (e.g. parked where they were dropped). */
@@ -107,7 +109,8 @@ export function OrderedHand({ cards, storageKey, selected, toggleCard, color, in
   /** Contextual control shown above the single focused card (e.g. Discard). */
   renderAction?: (card: Rush10Card) => ReactNode;
   headerExtra?: ReactNode;
-  hint?: ReactNode;
+  /** Render the sort controls into this element instead of a row above the cards; null while it mounts. */
+  controlsSlot?: HTMLElement | null;
   deal?: { id: string; createdAt: number };
   onDealingChange?: (dealing: boolean) => void;
 }) {
@@ -189,7 +192,7 @@ export function OrderedHand({ cards, storageKey, selected, toggleCard, color, in
     const handRect = container.getBoundingClientRect();
     const targets = shown.map((id, index) => {
       const t = shown.length > 1 ? index / (shown.length - 1) * 2 - 1 : 0;
-      return { id, x: handRect.left + fan.padLeft + index * fan.step - container.scrollLeft, y: handRect.top + TOP_ROOM + t * t * fan.sag, rotation: t * fan.maxAngle, delay: index * .2 };
+      return { id, x: handRect.left + fan.padLeft + index * fan.step - container.scrollLeft, y: handRect.top + fan.topRoom + t * t * fan.sag, rotation: t * fan.maxAngle, delay: index * .2 };
     });
     setDealTargets(targets);
     try { if (deal) sessionStorage.setItem(`${storageKey}:dealt`, deal.id); } catch { /* Animation still works without storage. */ }
@@ -217,7 +220,7 @@ export function OrderedHand({ cards, storageKey, selected, toggleCard, color, in
     setHovered(null);
     setFlight({ id: incoming.id, nonce: incoming.nonce, from: incoming.from, to: {
       left: rect.left + fan.padLeft + index * fan.step,
-      top: rect.top + TOP_ROOM + t * t * fan.sag,
+      top: rect.top + fan.topRoom + t * t * fan.sag,
       rotation: t * fan.maxAngle,
     } });
   }, [incoming, incomingPresent, reduceMotion]);
@@ -318,7 +321,7 @@ export function OrderedHand({ cards, storageKey, selected, toggleCard, color, in
     setAnnounce(`${label} moved to position ${target + 1} of ${ids.length}`);
   }
 
-  const { cw, ch, step, padLeft, spread, maxAngle, sag } = fan;
+  const { cw, ch, step, padLeft, spread, maxAngle, sag, topRoom } = fan;
   const radius = cw * 0.157;
   const spring = reduceMotion ? { duration: 0 } : { type: 'spring' as const, stiffness: 520, damping: 38, mass: 0.7 };
   const draggedCard = drag?.active ? cards.find(card => card.id === drag.id) : undefined;
@@ -329,10 +332,7 @@ export function OrderedHand({ cards, storageKey, selected, toggleCard, color, in
   const flightCard = flight ? cards.find(card => card.id === flight.id) : undefined;
   const n = shown.length;
 
-  return <>
-    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 md:px-8">
-      <p className="text-[11px] text-[#94A3B8]">{locked ? '' : hint ?? 'Drag to reorder anytime · Alt + Left/Right with a focused card'}</p>
-      <div className="flex flex-wrap items-center gap-2">
+  const controls = <div className="pointer-events-auto flex flex-wrap items-center gap-2">
         {headerExtra}
         {!locked && <div className="sort-split" role="group" aria-label="Sort my hand">
           <button type="button" data-testid="button-sort-hand" disabled={dealing || !!drag || cards.length < 2}
@@ -352,8 +352,13 @@ export function OrderedHand({ cards, storageKey, selected, toggleCard, color, in
             title="Sort by color, then number" aria-label="Sort by color"
             className="sort-split-alt"><Palette size={13} /> <span>By color</span></button>
         </div>}
-      </div>
-    </div>
+      </div>;
+
+  return <>
+    {controlsSlot !== undefined
+      ? controlsSlot && createPortal(controls, controlsSlot)
+      : /* Above the cards so raised cards can slide under the buttons; only the buttons take clicks. */
+        <div className="pointer-events-none relative z-[70] flex flex-wrap items-center justify-end gap-x-4 gap-y-2 px-4 md:px-8">{controls}</div>}
     <p className="sr-only" aria-live="polite">{announce}</p>
     <div ref={containerRef}
       onPointerMove={onPointerMove}
@@ -367,8 +372,8 @@ export function OrderedHand({ cards, storageKey, selected, toggleCard, color, in
       onPointerCancel={event => { if (dragRef.current?.pointerId === event.pointerId) endDrag(false); }}
       onLostPointerCapture={event => { if (event.target === event.currentTarget && dragRef.current?.pointerId === event.pointerId) endDrag(false); }}
       onPointerLeave={() => setHovered(null)}
-      className="hand-row relative flex w-full flex-nowrap overflow-hidden"
-      style={{ paddingLeft: padLeft, paddingTop: TOP_ROOM, paddingBottom: sag + 22 }}
+      className="hand-row relative flex w-full flex-nowrap overflow-x-clip overflow-y-visible"
+      style={{ paddingLeft: padLeft, paddingTop: topRoom, paddingBottom: sag + 22 }}
       data-testid="ordered-hand">
       {shown.map((id, index) => {
         const card = cards.find(candidate => candidate.id === id)!;

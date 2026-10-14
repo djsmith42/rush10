@@ -94,6 +94,7 @@ input::placeholder { color:#64748B; }
 }
 
 /* ---------- Game table ---------- */
+.test-game-page .table-felt, .test-game-page .game-layout { min-height:calc(100dvh - var(--test-toolbar-h, 58px)); }
 .table-felt { background:
   radial-gradient(ellipse 60% 42% at 50% 46%, rgb(79 70 229 / .16), transparent 70%),
   radial-gradient(ellipse 90% 40% at 50% 100%, rgb(163 230 53 / .05), transparent 70%); }
@@ -141,7 +142,6 @@ input::placeholder { color:#64748B; }
   .game-layout > section[aria-label="Opponents"] { padding-top:4px; padding-bottom:0; }
   .game-middle { padding-top:2px; padding-bottom:4px; gap:4px; }
   .game-piles { gap:4px; }
-  .game-pile-row { padding-top:48px; }
   .game-layout [data-self-hand] { margin-bottom:12px; padding-top:0; margin-top:0; }
   .home-card-background > .page-content { padding-top:12px; padding-bottom:24px; }
   .home-card-background > .page-content > section:first-child { padding-top:0; padding-bottom:0; }
@@ -171,7 +171,6 @@ input::placeholder { color:#64748B; }
   .game-layout > section[data-keep-selection]:not([data-self-hand]) { grid-column:1 / -1; grid-row:3; }
   .game-layout > div[data-keep-selection] { grid-column:1 / -1; grid-row:4; }
   .game-layout > [data-self-hand] { grid-column:1 / -1; grid-row:5; }
-  .test-game-page .table-felt, .test-game-page .game-layout { min-height:calc(100dvh - 58px); }
 }
 .hand-card { box-shadow:-6px 10px 22px rgba(0,0,0,.42); transition:box-shadow .2s ease; cursor:grab; }
 .hand-card.is-raised { box-shadow:-4px 22px 36px rgba(0,0,0,.55); }
@@ -181,9 +180,9 @@ input::placeholder { color:#64748B; }
 .pile-turn-arrow {
   position:absolute;
   left:50%;
-  bottom:calc(100% + 12px);
-  width:48px;
-  height:48px;
+  bottom:calc(100% + 4px);
+  width:40px;
+  height:40px;
   color:#A3E635;
   pointer-events:none;
   filter:drop-shadow(0 3px 8px rgb(163 230 53 / .3));

@@ -31,6 +31,7 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
   const [parked, setParked] = useState<ParkedDrop | null>(null);
   const [drawer, setDrawer] = useState<'scores' | 'rules' | null>(null);
   const [confirmExit, setConfirmExit] = useState(false);
+  const [sortSlot, setSortSlot] = useState<HTMLDivElement | null>(null);
   const deckRef = useRef<HTMLDivElement>(null);
   const discardRef = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
@@ -207,9 +208,9 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
     </section>
 
     {/* The middle of the table */}
-    <section className="game-middle relative z-10 flex flex-1 flex-col items-center justify-center gap-4 px-4 py-4">
+    <section className="game-middle relative z-10 flex flex-1 flex-col items-center justify-center gap-4 px-4 pb-4 pt-0">
       <motion.div key="piles" className="game-piles flex flex-col items-center gap-4" initial={reduce ? false : { opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }} transition={{ duration: 0.3, ease: EASE }}>
-          <div className="game-pile-row flex items-end gap-8 pt-16 md:gap-14">
+          <div className="game-pile-row flex items-end gap-8 pt-3 md:gap-14">
             <button onClick={() => draw('draw-deck')} disabled={!canDraw} data-testid="button-draw-deck" className={`pile group flex flex-col items-center gap-2 ${canDraw ? 'is-live' : ''}`}>
               <div ref={deckRef} data-pile="deck" className="relative">
                 {canDraw && <ArrowDown aria-hidden="true" className="pile-turn-arrow" strokeWidth={4} />}
@@ -249,6 +250,8 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
       <div className="flex flex-1 flex-wrap justify-center gap-1" data-meld-zone={selfId}>
         {myMelds.map(meld => <MeldSpread key={meld.id} meld={meld} ownerName="your" canHit={canHitMeld(meld)} onHit={() => hit(meld)} fresh={freshMelds.has(meld.id)} incoming={incomingHits} />)}
       </div>
+      {/* The hand's sort buttons share this row, so the hand needs no header row of its own. */}
+      <div ref={setSortSlot} className="self-center" data-testid="hand-controls" />
     </section>
 
     <AnimatePresence>
@@ -264,13 +267,13 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
     </AnimatePresence>
 
     {/* Your hand: the lower third */}
-    <section className="relative z-30 mb-[50px] mt-1 w-full pt-2" data-self-hand data-keep-selection aria-label="Your hand">
+    <section className="relative z-30 mb-3 w-full" data-self-hand data-keep-selection aria-label="Your hand">
       {room.hand.length === 0 ? <p className="py-14 text-center text-sm text-[#94A3B8]">{isPlaying ? 'Your hand is empty.' : 'Your hand will appear here when the round begins.'}</p> : (
         <OrderedHand key={`${code}-${selfId}-${room.roundNumber}`} storageKey={`rush10-hand-${code}-${selfId}`}
           deal={isPlaying ? [...(room.events ?? [])].reverse().find(event => event.kind === 'deal') : undefined}
           onDealingChange={setDealingHand}
           onDragCardChange={setDraggedId} onDropCards={dropCards} hiddenIds={parkedShown ? [parked!.card.id] : undefined}
-          cards={room.hand} selected={selected} toggleCard={toggleCard} color={cardColor} incoming={incoming}
+          cards={room.hand} selected={selected} toggleCard={toggleCard} color={cardColor} incoming={incoming} controlsSlot={sortSlot}
           locked={!isPlaying} renderAction={isPlaying && isMyTurn && room.turnState === 'discard' ? (card: Rush10Card) => <span className="flex items-center gap-1.5">{card.type === 'skip' && room.players.length > 2 && <label className="table-select"><span>Skip</span><select value={targetPlayerId} onChange={e => setTargetPlayerId(e.target.value)} onPointerDown={e => e.stopPropagation()} data-testid="select-skip-target"><option value="">Choose target</option>{room.players.filter(p => p.id !== selfId).map(p => <option value={p.id} key={p.id}>{p.name}</option>)}</select></label>}<button type="button" onClick={() => discard(card)} disabled={isBusy || needsSkipTarget(card)} data-testid="button-discard" aria-label={`Discard ${cardLabel(card)}`} className="discard-pill">{actPending ? <LoaderCircle size={13} className="animate-spin" /> : <ArrowDown size={13} />} Discard</button></span> : undefined} />
       )}
     </section>
