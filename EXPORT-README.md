@@ -4,7 +4,7 @@ Includes the game frontend, API server, shared packages, and existing preview sa
 Excludes secrets, database contents, browser player sessions, dependencies, build outputs, and internal workspace files.
 
 ## Requirements
-A recent Node.js version (22.12+), pnpm, and PostgreSQL.
+A recent Node.js version (22.12+) and pnpm. Storage is a SQLite file (via better-sqlite3).
 Install dependencies from this workspace root with `pnpm install --frozen-lockfile`.
 
 ## Build
@@ -13,8 +13,8 @@ Install dependencies from this workspace root with `pnpm install --frozen-lockfi
 - API: `pnpm --filter @workspace/api-server build`
 
 ## Hosting notes
-Configure DATABASE_URL securely for your PostgreSQL database. Initialize a new database schema using `pnpm --filter @workspace/db push`; review proposed schema changes before applying to any existing database.
-Run the API with NODE_ENV=production and PORT set using `pnpm --filter @workspace/api-server start`.
+Set DATABASE_PATH to the SQLite file location (outside any web-served directory); the API creates the file and table on startup. Run the API with NODE_ENV=production, PORT and DATABASE_PATH set (optionally HOST=127.0.0.1 behind a proxy) using `pnpm --filter @workspace/api-server start`.
+The thesmithfam.org/rush10 deployment (systemd unit, Apache snippet, deploy script) is in `deploy/`; redeploy with `./deploy/deploy.sh`.
 Serve the frontend build output with a production web server and proxy /api requests to the API. Configure SPA fallback for /game/:code links. Check vite.config.ts for the configured build output directory.
 This is a source export, not a preconfigured standalone deployment.
 

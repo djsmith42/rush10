@@ -1,0 +1,20 @@
+[Unit]
+Description=Rush 10 API server
+After=network.target
+
+[Service]
+Type=simple
+User=dave
+WorkingDirectory=/home/dave/rush10/artifacts/api-server
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=3010
+Environment=DATABASE_PATH=/var/lib/rush10/rush10.db
+ExecStart=/opt/node24/bin/node --enable-source-maps dist/index.mjs
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

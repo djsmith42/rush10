@@ -1,4 +1,4 @@
-import { pool } from "@workspace/db";
+import { sqlite } from "@workspace/db";
 
 type RoomState = { code: string; skippedPlayerIds: Set<string> };
 type StoredRoom<T extends RoomState> = Omit<T, "skippedPlayerIds"> & { skippedPlayerIds: string[] };
@@ -7,46 +7,39 @@ function encode<T extends RoomState>(room: T) {
   return JSON.stringify({ ...room, skippedPlayerIds: [...room.skippedPlayerIds] });
 }
 
-function decode<T extends RoomState>(state: StoredRoom<T>): T {
-  return { ...state, skippedPlayerIds: new Set(state.skippedPlayerIds) } as T;
+function decode<T extends RoomState>(state: string): T {
+  const stored = JSON.parse(state) as StoredRoom<T>;
+  return { ...stored, skippedPlayerIds: new Set(stored.skippedPlayerIds) } as T;
 }
 
+const insertRoom = sqlite.prepare("INSERT INTO rush10_rooms (code, state) VALUES (?, ?) ON CONFLICT (code) DO NOTHING");
+const selectRoom = sqlite.prepare<[string], { state: string }>("SELECT state FROM rush10_rooms WHERE code = ?");
+const updateRoom = sqlite.prepare(
+  "UPDATE rush10_rooms SET state = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE code = ?",
+);
+
 export async function createStoredRoom<T extends RoomState>(room: T) {
-  const result = await pool.query(
-    "INSERT INTO rush10_rooms (code, state) VALUES ($1, $2::jsonb) ON CONFLICT (code) DO NOTHING",
-    [room.code, encode(room)],
-  );
-  return result.rowCount === 1;
+  return insertRoom.run(room.code, encode(room)).changes === 1;
 }
 
 export async function readStoredRoom<T extends RoomState>(code: string): Promise<T | undefined> {
-  const result = await pool.query("SELECT state FROM rush10_rooms WHERE code = $1", [code]);
-  return result.rows[0] ? decode<T>(result.rows[0].state) : undefined;
+  const row = selectRoom.get(code);
+  return row ? decode<T>(row.state) : undefined;
 }
 
 /** Lock the latest snapshot, apply one move, and acknowledge only after durable commit.
  * A rejected move rolls back completely, including any partially modified hand.
- * Row locks also serialize moves from different server instances during republishing.
+ * BEGIN IMMEDIATE takes SQLite's write lock up front, serializing moves even across processes.
  */
 export async function changeStoredRoom<T extends RoomState, R>(
   code: string,
   change: (room: T | undefined) => R,
 ): Promise<R> {
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const result = await client.query("SELECT state FROM rush10_rooms WHERE code = $1 FOR UPDATE", [code]);
-    const room = result.rows[0] ? decode<T>(result.rows[0].state) : undefined;
+  return sqlite.transaction(() => {
+    const row = selectRoom.get(code);
+    const room = row ? decode<T>(row.state) : undefined;
     const response = change(room);
-    if (room) {
-      await client.query("UPDATE rush10_rooms SET state = $2::jsonb, updated_at = now() WHERE code = $1", [code, encode(room)]);
-    }
-    await client.query("COMMIT");
+    if (room) updateRoom.run(encode(room), code);
     return response;
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
+  }).immediate();
 }
