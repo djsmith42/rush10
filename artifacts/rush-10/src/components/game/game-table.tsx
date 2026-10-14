@@ -282,14 +282,16 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
         if (e.shiftKey && (document.activeElement === first || document.activeElement === headingRef.current)) { e.preventDefault(); last.focus(); }
         else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
       }}
-      className="round-results-overlay absolute inset-0 z-[85] m-0 flex h-full max-h-none w-full max-w-none flex-col items-center justify-center overflow-y-auto bg-transparent p-4 text-white">
+      className="round-results-overlay absolute inset-0 z-[85] m-0 flex h-full max-h-none w-full max-w-none flex-col items-center overflow-y-auto bg-transparent p-4 text-white">
       <button onClick={onExit} data-testid="button-exit-overlay" className="table-chip absolute left-4 top-3 md:left-8">Exit Game</button>
-      <div className="w-full max-w-[840px]">
+      <div aria-hidden className="grow" />
+      <div className="w-full max-w-[840px] shrink-0">
         <Results room={room} selfId={selfId} isFinished={isFinished} headingRef={headingRef} />
           {isRoundOver && (room.hostPlayerId === selfId
             ? <button onClick={start} disabled={isBusy} data-testid="button-next-round" className="mx-auto mt-6 flex items-center justify-center gap-2 rounded-full bg-[#FF3366] px-7 py-3.5 font-bold text-white shadow-[0_8px_24px_rgba(255,51,102,.4)] transition hover:-translate-y-0.5 active:translate-y-[1px] disabled:opacity-50">{startPending ? <LoaderCircle size={17} className="animate-spin" /> : <ArrowRight size={17} />} Deal the next round</button>
             : <p className="mt-6 flex items-center justify-center gap-2 text-xs font-semibold text-[#94A3B8]"><LoaderCircle size={14} className="animate-spin" /> Waiting for the host to deal the next round</p>)}
       </div>
+      <div aria-hidden className="grow-[3]" />
     </dialog>}
     <EventFlights current={flights.current} advance={flights.advance} selfId={selfId} parked={parkedShown ? parked : null} />
 
