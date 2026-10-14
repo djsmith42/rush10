@@ -4,16 +4,16 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import type { Rush10Card, Rush10Meld, Rush10PlayerAction, Rush10RoomView, Rush10Rules } from '@workspace/api-client-react';
 import { ArrowDown, ArrowRight, CircleHelp, Crown, ListOrdered, LoaderCircle, Trophy, X } from 'lucide-react';
 import { PHASE_PARTS, recognizeSelection } from '@/lib/meld-recognition';
-import { OrderedHand, type IncomingDraw } from '@/components/ordered-hand';
+import { OrderedHand, type DropRect, type IncomingDraw } from '@/components/ordered-hand';
 import { CardBack, PlayingCard, cardColor, cardLabel } from '@/components/cards';
 import { AnimalAvatar } from '@/components/avatars';
 import { PlayerTile, RulesPanel } from '@/components/room-bits';
 import { MeldSpread, OpponentSeat, SeatIdentity } from '@/components/game/seat';
-import { EventFlights, useTableEvents } from '@/components/game/event-flights';
+import { EventFlights, isParkedEvent, useTableEvents, type ParkedDrop } from '@/components/game/event-flights';
 import { SkipSplash } from '@/components/game/skip-splash';
 
 type Extra = Partial<Omit<Rush10PlayerAction, 'playerToken' | 'action'>>;
-export type Perform = (action: Rush10PlayerAction['action'], extra?: Extra, onDone?: (updated: Rush10RoomView) => void) => void;
+export type Perform = (action: Rush10PlayerAction['action'], extra?: Extra, onDone?: (updated: Rush10RoomView) => void, onError?: () => void) => void;
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -27,6 +27,7 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
   const [dealingHand, setDealingHand] = useState(false);
   const [targetPlayerId, setTargetPlayerId] = useState('');
   const [incoming, setIncoming] = useState<IncomingDraw | null>(null);
+  const [parked, setParked] = useState<ParkedDrop | null>(null);
   const [drawer, setDrawer] = useState<'scores' | 'rules' | null>(null);
   const deckRef = useRef<HTMLDivElement>(null);
   const discardRef = useRef<HTMLDivElement>(null);
@@ -50,7 +51,12 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
   useEffect(() => {
     setSelected([]);
     setIncoming(null);
+    setParked(null);
   }, [room.roundNumber, room.status]);
+
+  // A dropped card stays parked until its flight lands; it leaves the hand when the server confirms.
+  const parkedShown = !!parked && (room.hand.some(card => card.id === parked.card.id) || flights.pending.some(event => isParkedEvent(event, parked, selfId)));
+  useEffect(() => { if (parked && !parkedShown) setParked(null); }, [parked, parkedShown]);
 
   // Opponents in seating order, starting after you.
   const opponents = useMemo(() => {
@@ -64,8 +70,8 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
   const freshMelds = new Set(room.melds.filter(m => !knownMelds.current!.has(m.id)).map(m => m.id));
   useEffect(() => { room.melds.forEach(m => knownMelds.current!.add(m.id)); });
 
-  function act(action: Rush10PlayerAction['action'], extra: Extra = {}, onDone?: (updated: Rush10RoomView) => void) {
-    perform(action, extra, (updated) => { setSelected([]); setTargetPlayerId(''); onDone?.(updated); });
+  function act(action: Rush10PlayerAction['action'], extra: Extra = {}, onDone?: (updated: Rush10RoomView) => void, onError?: () => void) {
+    perform(action, extra, (updated) => { setSelected([]); setTargetPlayerId(''); onDone?.(updated); }, onError);
   }
 
   function toggleCard(id: string) {
@@ -112,18 +118,37 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
     act('hit', { cardIds: hitIds, meldId: meld.id, ...target });
   }
 
-  function dropCards(id: string, x: number, y: number) {
+  const needsSkipTarget = (card: Rush10Card) => card.type === 'skip' && room.players.length > 2 && !targetPlayerId;
+  function discard(card: Rush10Card, onError?: () => void) {
+    act('discard', { cardIds: [card.id], ...(targetPlayerId ? { targetPlayerId } : {}) }, undefined, onError);
+  }
+  // Discarding by drag moves exactly one card; dragging part of a multi-card selection is a hit, not a discard.
+  const draggedDiscard = draggedId && hitIds.length === 1 ? room.hand.find(card => card.id === draggedId) : undefined;
+  const canDropDiscard = isPlaying && isMyTurn && room.turnState === 'discard' && !!draggedDiscard && !needsSkipTarget(draggedDiscard) && !isBusy && !dealingHand;
+
+  function dropCards(id: string, x: number, y: number, rect: DropRect) {
+    // Pointer capture keeps hand dragging stable; hit-test the actual drop position.
+    const dropped = document.elementFromPoint(x, y);
+    // Match the lifted drag card's pose (OrderedHand tilts it -5deg at 1.08x) so its flight continues from the drop.
+    const park = (kind: ParkedDrop['kind'], card: Rush10Card) => {
+      if (!reduce) setParked({ kind, card, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, width: rect.width * 1.08, rotate: -5 });
+    };
+    if (canDropDiscard && draggedDiscard?.id === id && dropped?.closest('[data-drop-discard]')) {
+      park('discard', draggedDiscard);
+      discard(draggedDiscard, () => setParked(null));
+      return true;
+    }
     if (!isPlaying || !isMyTurn || !self?.hasLaidPhase || room.turnState !== 'discard' || isBusy || dealingHand) return false;
     const ids = selected.includes(id) ? selected : [id];
     const cards = room.hand.filter(card => ids.includes(card.id));
     if (cards.length !== ids.length) return false;
-    // Pointer capture keeps hand dragging stable; hit-test the actual drop position.
-    const element = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-drop-meld]');
+    const element = dropped?.closest<HTMLElement>('[data-drop-meld]');
     const meld = room.melds.find(meld => meld.id === element?.dataset.dropMeld);
     if (!meld) return false;
     const target = multiHitTarget(cards, meld);
     if (!target) return false;
-    act('hit', { cardIds: ids, meldId: meld.id, ...target });
+    park('hit', cards.find(card => card.id === id)!);
+    act('hit', { cardIds: ids, meldId: meld.id, ...target }, undefined, () => setParked(null));
     return true;
   }
 
@@ -136,7 +161,7 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
   const turnLine = !isPlaying ? null : isMyTurn
     ? room.turnState === 'draw' ? skippedOpponent ? `it's your turn again because you skipped ${skippedOpponent.name}` : 'Your turn. Draw a card.' : 'Select cards to lay down, hit, or discard to finish.'
     : `${currentPlayer?.name ?? 'Someone'} is ${room.turnState === 'draw' ? 'drawing' : 'thinking'}`;
-  const handHint = room.turnState === 'discard' && isMyTurn && isPlaying ? 'Select matching cards, then tap a highlighted laid level to add them. Select one card to discard.' : '';
+  const handHint = room.turnState === 'discard' && isMyTurn && isPlaying ? 'Select matching cards, then tap a highlighted laid level to add them. Select one card to discard, or drag it to the discard pile.' : '';
 
   const over = isRoundOver || isFinished;
   const bgRef = useRef<HTMLDivElement>(null);
@@ -185,11 +210,11 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
               </div>
               <span className="text-center text-[11px] font-bold text-white/80">Draw pile</span>
             </button>
-            <div className="group/skip relative" tabIndex={blockedSkipDraw ? 0 : undefined}
+            <div className="group/skip relative" data-drop-discard tabIndex={blockedSkipDraw ? 0 : undefined}
               aria-label={blockedSkipDraw ? "You can't draw a Skip from the discard pile" : undefined}>
             {blockedSkipDraw && <span role="tooltip" className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-3 w-56 -translate-x-1/2 rounded-xl bg-[#0B1120] px-3 py-2 text-center text-sm font-semibold text-white opacity-0 shadow-xl ring-1 ring-white/30 transition-opacity group-hover/skip:opacity-100 group-focus/skip:opacity-100">You can't draw a Skip from the discard pile</span>}
-            <button onClick={() => { if (!blockedSkipDraw) draw('draw-discard'); }} disabled={!canDraw || blockedSkipDraw || !room.discardTop || discardInFlight} data-testid="button-draw-discard" className={`pile group flex flex-col items-center gap-2 ${canDraw && !blockedSkipDraw && room.discardTop && !discardInFlight ? 'is-live' : ''}`}>
-              <div ref={discardRef} data-pile="discard" className="relative" style={{ width: 88, height: 135 }}>
+            <button onClick={() => { if (!blockedSkipDraw) draw('draw-discard'); }} disabled={!canDraw || blockedSkipDraw || !room.discardTop || discardInFlight} data-testid="button-draw-discard" className={`pile group flex flex-col items-center gap-2 ${canDraw && !blockedSkipDraw && room.discardTop && !discardInFlight ? 'is-live' : ''} ${canDropDiscard ? 'is-drop-target' : ''}`}>
+              <div ref={discardRef} data-pile="discard" className="discard-drop relative" style={{ width: 88, height: 135 }}>
                 {canDraw && !blockedSkipDraw && room.discardTop && !discardInFlight && <ArrowDown aria-hidden="true" className="pile-turn-arrow" strokeWidth={4} />}
                   {visibleDiscard ? <div key={visibleDiscard.id} className="absolute inset-0 rotate-[3deg]">
                     <div className="pile-top">
@@ -235,9 +260,9 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
         <OrderedHand key={`${code}-${selfId}-${room.roundNumber}`} storageKey={`rush10-hand-${code}-${selfId}`}
           deal={isPlaying ? [...(room.events ?? [])].reverse().find(event => event.kind === 'deal') : undefined}
           onDealingChange={setDealingHand}
-          onDragCardChange={setDraggedId} onDropCards={dropCards}
+          onDragCardChange={setDraggedId} onDropCards={dropCards} hiddenIds={parkedShown ? [parked!.card.id] : undefined}
           cards={room.hand} selected={selected} toggleCard={toggleCard} color={cardColor} incoming={incoming} hint={handHint}
-          locked={!isPlaying} renderAction={isPlaying && isMyTurn && room.turnState === 'discard' ? (card: Rush10Card) => <span className="flex items-center gap-1.5">{card.type === 'skip' && room.players.length > 2 && <label className="table-select"><span>Skip</span><select value={targetPlayerId} onChange={e => setTargetPlayerId(e.target.value)} onPointerDown={e => e.stopPropagation()} data-testid="select-skip-target"><option value="">Choose target</option>{room.players.filter(p => p.id !== selfId).map(p => <option value={p.id} key={p.id}>{p.name}</option>)}</select></label>}<button type="button" onClick={() => act('discard', { cardIds: [card.id], ...(targetPlayerId ? { targetPlayerId } : {}) })} disabled={isBusy || (card.type === 'skip' && room.players.length > 2 && !targetPlayerId)} data-testid="button-discard" aria-label={`Discard ${cardLabel(card)}`} className="discard-pill">{actPending ? <LoaderCircle size={13} className="animate-spin" /> : <ArrowDown size={13} />} Discard</button></span> : undefined} />
+          locked={!isPlaying} renderAction={isPlaying && isMyTurn && room.turnState === 'discard' ? (card: Rush10Card) => <span className="flex items-center gap-1.5">{card.type === 'skip' && room.players.length > 2 && <label className="table-select"><span>Skip</span><select value={targetPlayerId} onChange={e => setTargetPlayerId(e.target.value)} onPointerDown={e => e.stopPropagation()} data-testid="select-skip-target"><option value="">Choose target</option>{room.players.filter(p => p.id !== selfId).map(p => <option value={p.id} key={p.id}>{p.name}</option>)}</select></label>}<button type="button" onClick={() => discard(card)} disabled={isBusy || needsSkipTarget(card)} data-testid="button-discard" aria-label={`Discard ${cardLabel(card)}`} className="discard-pill">{actPending ? <LoaderCircle size={13} className="animate-spin" /> : <ArrowDown size={13} />} Discard</button></span> : undefined} />
       )}
     </section>
 
@@ -265,7 +290,7 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
             : <p className="mt-6 flex items-center justify-center gap-2 text-xs font-semibold text-[#94A3B8]"><LoaderCircle size={14} className="animate-spin" /> Waiting for the host to deal the next round</p>)}
       </div>
     </dialog>}
-    <EventFlights current={flights.current} advance={flights.advance} selfId={selfId} />
+    <EventFlights current={flights.current} advance={flights.advance} selfId={selfId} parked={parkedShown ? parked : null} />
 
     <AnimatePresence>
       {drawer && <motion.div key="drawer" className="fixed inset-0 z-[90]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>

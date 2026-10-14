@@ -258,13 +258,13 @@ function RoomPage() {
     setNotice('');
   }
 
-  const perform: Perform = (action, extra = {}, onDone) => {
-    if (!token) return;
+  const perform: Perform = (action, extra = {}, onDone, onError) => {
+    if (!token) { onError?.(); return; }
     setNotice('');
     void queryClient.cancelQueries({ queryKey: getGetRush10RoomQueryKey(code, { playerToken: token }) });
     act.mutate({ code, data: { playerToken: token, action, ...extra } as Rush10PlayerAction }, {
       onSuccess: (updated) => { updateRoom(updated); onDone?.(updated); },
-      onError: (reason) => setNotice(reason instanceof Error ? reason.message : 'That move could not be played. Try again.'),
+      onError: (reason) => { setNotice(reason instanceof Error ? reason.message : 'That move could not be played. Try again.'); onError?.(); },
     });
   };
 

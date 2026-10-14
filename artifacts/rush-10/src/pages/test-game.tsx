@@ -67,8 +67,8 @@ export default function TestGamePage() {
   }
   useEffect(() => { void initialize(); }, []);
 
-  const perform: Perform = async (action, extra, onDone) => {
-    if (!session || busy) return;
+  const perform: Perform = async (action, extra, onDone, onError) => {
+    if (!session || busy) { onError?.(); return; }
     setBusy(true);
     setError('');
     try {
@@ -76,7 +76,7 @@ export default function TestGamePage() {
       const updated = await actInRush10Game(code, { ...extra, action, playerToken: token });
       client.setQueryData(key, updated);
       onDone?.(updated);
-    } catch (e) { setError(e instanceof Error ? e.message : 'The move failed.'); }
+    } catch (e) { setError(e instanceof Error ? e.message : 'The move failed.'); onError?.(); }
     finally { setBusy(false); }
   };
   async function start() {

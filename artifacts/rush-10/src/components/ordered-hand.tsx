@@ -55,6 +55,9 @@ const EDGE_PAD = 18;
 const TOP_ROOM = 84;
 const EASE = [0.22, 1, 0.36, 1] as const;
 
+/** On-screen rect of the dragged card where it was released. */
+export type DropRect = { left: number; top: number; width: number; height: number };
+
 /** A successful draw: the new card id and the on-screen rect of the pile it came from. */
 export type IncomingDraw = { id: string; from: { left: number; top: number; width: number; height: number }; nonce: number };
 
@@ -89,9 +92,11 @@ function useFan(width: number, n: number, height: number) {
   return { cw, ch, step, padLeft, spread, maxAngle, sag, edgePad };
 }
 
-export function OrderedHand({ cards, storageKey, selected, toggleCard, color, incoming, renderAction, headerExtra, hint, deal, onDealingChange, onDragCardChange, onDropCards, locked = false }: {
+export function OrderedHand({ cards, storageKey, selected, toggleCard, color, incoming, renderAction, headerExtra, hint, deal, onDealingChange, onDragCardChange, onDropCards, hiddenIds, locked = false }: {
   onDragCardChange?: (id: string | null) => void;
-  onDropCards?: (id: string, x: number, y: number) => boolean;
+  onDropCards?: (id: string, x: number, y: number, rect: DropRect) => boolean;
+  /** Cards still in hand but drawn elsewhere (e.g. parked where they were dropped). */
+  hiddenIds?: string[];
   locked?: boolean;
   cards: Rush10Card[];
   storageKey: string;
@@ -223,7 +228,8 @@ export function OrderedHand({ cards, storageKey, selected, toggleCard, color, in
     if (!current) return;
     if (current.active) {
       suppressClick.current = true;
-      const played = commit && onDropCards?.(current.id, current.x, current.y);
+      const { cw, ch } = fanRef.current;
+      const played = commit && onDropCards?.(current.id, current.x, current.y, { left: current.x - current.offsetX, top: current.y - current.offsetY, width: cw, height: ch });
       if (commit && !played) setOrder(reconcileOrder(shownRef.current, cardsRef.current));
       else setOrder(reconcileOrder(current.origin, cardsRef.current));
       setTimeout(() => { suppressClick.current = false; }, 0);
@@ -403,11 +409,11 @@ export function OrderedHand({ cards, storageKey, selected, toggleCard, color, in
             aria-label={`${label}, position ${index + 1} of ${n}`} aria-pressed={isSelected}
             aria-describedby="hand-reorder-hint"
             data-testid={`card-in-hand-${id}`}
-            className={`hand-card relative block touch-none select-none overflow-hidden border-2 border-[#CBD5E1] outline-none focus-visible:ring-[3px] focus-visible:ring-[#FFB800] ${isSelected ? 'is-selected' : ''} ${raised ? 'is-raised' : ''} ${lifted || inFlight ? 'opacity-0' : ''}`}
+            className={`hand-card relative block touch-none select-none overflow-hidden border-2 border-[#CBD5E1] outline-none focus-visible:ring-[3px] focus-visible:ring-[#FFB800] ${isSelected ? 'is-selected' : ''} ${raised ? 'is-raised' : ''} ${lifted || inFlight || hiddenIds?.includes(id) ? 'opacity-0' : ''}`}
             style={{ width: cw, height: ch, borderRadius: radius, background: color(card, index), transformOrigin: '50% 100%' }}>
             <ScaledFace card={card} innerWidth={cw - 4} />
           </motion.button>
-          {isFocus && !drag?.active && !inFlight && renderAction && <motion.div key={`action-${id}`}
+          {isFocus && !drag?.active && !inFlight && !hiddenIds?.includes(id) && renderAction && <motion.div key={`action-${id}`}
             style={{ x: '-50%', top: arcY - 30 - 50 }} initial={reduceMotion ? false : { opacity: 0, y: 8, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.2, ease: EASE }}
             className="absolute left-1/2 z-[70] whitespace-nowrap" data-keep-selection>
             {renderAction(card)}
