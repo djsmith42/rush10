@@ -9,7 +9,6 @@ export {
   joinRush10RoomBodyPlayerNameMax,
   JoinRush10RoomBody,
   JoinRush10RoomResponse,
-  GetRush10RoomQueryParams,
   GetRush10RoomResponse,
   StartRush10GameParams,
   StartRush10GameBody,

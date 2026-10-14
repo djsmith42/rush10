@@ -3,10 +3,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
 import {
   createRush10Room, joinRush10Room, actInRush10Game, startRush10Game, getRush10Room,
-  useGetRush10Room, useGetRush10Rules, getGetRush10RoomQueryKey,
+  useGetRush10Room, useGetRush10Rules,
   type Rush10RoomSession,
 } from '@workspace/api-client-react';
 import { GameTable, type Perform } from '@/components/game/game-table';
+import { errorMessage } from '@/lib/error-message';
+import { playerAuth, roomQueryKey } from '@/lib/room-query';
 
 type Session = Pick<Rush10RoomSession, 'roomCode' | 'playerToken' | 'playerId'>;
 const KEY = 'rush10-test-game-sessions';
@@ -30,7 +32,7 @@ function prepareGame(): Promise<Session[]> {
       sessions.push(identity(await joinRush10Room(host.roomCode, { playerName: 'Player 2' })));
       save();
     }
-    const room = await getRush10Room(host.roomCode, { playerToken: host.playerToken });
+    const room = await getRush10Room(host.roomCode, playerAuth(host.playerToken));
     if (room.status === 'waiting') {
       await actInRush10Game(host.roomCode, { playerToken: host.playerToken, action: 'set-avatar', avatar: 'fox' });
       await actInRush10Game(host.roomCode, { playerToken: sessions[1].playerToken, action: 'set-avatar', avatar: 'panda' });
@@ -52,9 +54,10 @@ export default function TestGamePage() {
   const session = sessions[perspective];
   const code = session?.roomCode ?? '';
   const token = session?.playerToken ?? '';
-  const key = getGetRush10RoomQueryKey(code, { playerToken: token });
-  const roomQuery = useGetRush10Room(code, { playerToken: token }, {
+  const key = roomQueryKey(code, session?.playerId);
+  const roomQuery = useGetRush10Room(code, {
     query: { enabled: !!token, queryKey: key, refetchInterval: busy ? false : 1200 },
+    request: playerAuth(token),
   });
   const rules = useGetRush10Rules();
 
@@ -62,7 +65,7 @@ export default function TestGamePage() {
     setLoading(true);
     setError('');
     try { setSessions(await prepareGame()); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Could not create the test game.'); }
+    catch (e) { setError(errorMessage(e, 'Could not create the test game.')); }
     finally { setLoading(false); }
   }
   useEffect(() => { void initialize(); }, []);
@@ -76,7 +79,7 @@ export default function TestGamePage() {
       const updated = await actInRush10Game(code, { ...extra, action, playerToken: token });
       client.setQueryData(key, updated);
       onDone?.(updated);
-    } catch (e) { setError(e instanceof Error ? e.message : 'The move failed.'); onError?.(); }
+    } catch (e) { setError(errorMessage(e, 'The move failed.')); onError?.(); }
     finally { setBusy(false); }
   };
   async function start() {
@@ -86,7 +89,7 @@ export default function TestGamePage() {
     try {
       await client.cancelQueries({ queryKey: key });
       client.setQueryData(key, await startRush10Game(code, { playerToken: token }));
-    } catch (e) { setError(e instanceof Error ? e.message : 'Could not start the next round.'); }
+    } catch (e) { setError(errorMessage(e, 'Could not start the next round.')); }
     finally { setBusy(false); }
   }
 

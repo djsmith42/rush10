@@ -198,14 +198,11 @@ export const JoinRush10RoomResponse = zod.object({
 
 
 /**
+ * The player token goes in the Authorization header, never the URL, so polling does not write credentials to proxy access logs.
  * @summary Get the public room state and this player's hand
  */
 export const GetRush10RoomParams = zod.object({
   "code": zod.coerce.string()
-})
-
-export const GetRush10RoomQueryParams = zod.object({
-  "playerToken": zod.coerce.string()
 })
 
 export const GetRush10RoomResponse = zod.object({

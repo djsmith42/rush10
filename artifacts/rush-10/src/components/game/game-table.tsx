@@ -160,7 +160,7 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
   const skippedOpponent = room.players.length === 2 && lastEvent?.kind === 'discard' && lastEvent.card?.type === 'skip' && lastEvent.playerId === selfId
     ? room.players.find(player => player.id !== selfId) : undefined;
   const turnLine = !isPlaying ? null : isMyTurn
-    ? room.turnState === 'draw' ? skippedOpponent ? `it's your turn again because you skipped ${skippedOpponent.name}` : 'Your turn. Draw a card.' : 'Select cards to lay down, hit, or discard to finish.'
+    ? room.turnState === 'draw' ? skippedOpponent ? `it's your turn again because you skipped ${skippedOpponent.name}` : 'Your turn. Draw a card.' : 'Select cards to lay down, add to a pile, or discard to finish.'
     : `${currentPlayer?.name ?? 'Someone'} is ${room.turnState === 'draw' ? 'drawing' : 'thinking'}`;
   const handHint = room.turnState === 'discard' && isMyTurn && isPlaying ? 'Select matching cards, then tap a highlighted laid level to add them. Select one card to discard, or drag it to the discard pile.' : '';
 
@@ -336,7 +336,7 @@ function Results({ room, selfId, isFinished, headingRef }: { room: Rush10RoomVie
       {roundReason && <p className="mt-3 text-sm font-semibold text-white" data-testid="text-round-end-reason">{roundReason}</p>}
     </>}
     </motion.div>
-    <ul className="mx-auto mt-6 max-w-[690px] list-none space-y-1">
+    <ul className="mx-auto mt-6 max-w-[380px] list-none space-y-1">
       {ranked.map((p, i) => <motion.li key={p.id} initial={reduce ? false : { opacity: 0, x: -14 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 + i * 0.07, ease: EASE }}
         className={`flex items-center gap-3 px-2 py-2.5 text-left ${p.id === room.winnerId ? 'text-[#A3E635]' : ''}`} data-testid={`result-row-${p.id}`}>
         <AnimalAvatar kind={p.avatar} size={34} />

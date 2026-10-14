@@ -40,7 +40,7 @@ async function post(path, body, expected = 200) {
   return response.json();
 }
 async function view(session) {
-  const response = await fetch(`${base}/rooms/${session.roomCode}?playerToken=${session.playerToken}`);
+  const response = await fetch(`${base}/rooms/${session.roomCode}`, { headers: { Authorization: `Bearer ${session.playerToken}` } });
   assert.equal(response.status, 200);
   return response.json();
 }
@@ -58,6 +58,11 @@ try {
     playerToken: guest.playerToken, action: "set-avatar", avatar: "invalid",
   }, 400);
   const lobby = await view(host);
+  const roomUrl = `${base}/rooms/${host.roomCode}`;
+  assert.equal((await fetch(roomUrl)).status, 403, "Polling without a token must be refused");
+  assert.equal((await fetch(roomUrl, { headers: { Authorization: "Bearer not-a-player" } })).status, 403, "Unknown tokens must be refused");
+  const legacy = await fetch(`${roomUrl}?playerToken=${host.playerToken}`);
+  assert.deepEqual(await legacy.json(), lobby, "Tabs on the previous build may still poll with ?playerToken= during the transition");
   await stop();
   await start();
   assert.deepEqual(await view(host), lobby, "Lobby and saved player session must survive restart");

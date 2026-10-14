@@ -92,10 +92,10 @@ const PHASES: Array<{ number: number; title: string; description: string; parts:
 ];
 const TURN_RULES = [
   "On your turn, draw one card from the draw pile or the top of the discard pile.",
-  "After drawing, you may lay down your current level, hit cards onto any laid level, then discard one card to end your turn unless the round has ended.",
+  "After drawing, you may lay down your current level, add cards to any laid-down pile, then discard one card to end your turn unless the round has ended.",
   "A Group is cards with the same number. A Sequence is consecutive numbers. Wild cards can stand in for a number or color.",
   "A Skip card is discarded to make a chosen opponent miss their next turn. Nobody may draw a Skip from the discard pile. Skip cards cannot be used in a Group, Sequence, or color level.",
-  "You can lay down only your current level, and only once per round. After laying it down, you can hit eligible cards onto any player's melds.",
+  "You can lay down only your current level, and only once per round. After laying it down, you can add matching cards to any player's laid-down piles.",
   "The round ends immediately when every player has laid their current level, or when a player empties their hand. Players who laid their level advance; everyone scores the cards left in hand.",
   "The first player to complete Level 10 wins. If more than one player completes it in that round, the lowest score wins.",
 ];
@@ -219,6 +219,13 @@ function toView(room: GameRoom, player: GamePlayer) {
     message: room.message,
     winnerId: room.winnerId,
   };
+}
+
+/** The poll token travels in `Authorization: Bearer`, keeping it out of URLs and access logs.
+ * The `?playerToken=` fallback only serves tabs still running the previous build; remove it once they have reloaded. */
+function requestToken(req: { get(name: string): string | undefined; query: Record<string, unknown> }) {
+  const match = /^Bearer\s+(.+)$/i.exec(req.get("authorization") ?? "");
+  return match ? match[1].trim() : req.query.playerToken;
 }
 
 function assertCurrentTurn(room: GameRoom, player: GamePlayer) {
@@ -444,13 +451,14 @@ router.post("/rush10/rooms/:code/join", async (req, res) => {
 router.get("/rush10/rooms/:code", async (req, res) => {
   try {
     const room = requireRoom(await readStoredRoom<GameRoom>(req.params.code.toUpperCase()));
-    const player = getPlayer(room, req.query.playerToken);
+    const token = requestToken(req);
+    const player = getPlayer(room, token);
     if (room.status === "playing" && room.players.length > 0 &&
         (room.players.some(player => player.hand.length === 0) || room.players.every(player => player.hasLaidPhase))) {
       // Re-read under the same lock as moves; concurrent polls must not score twice.
       const recovered = await changeStoredRoom(req.params.code.toUpperCase(), (stored: GameRoom | undefined) => {
         const latest = requireRoom(stored);
-        const viewer = getPlayer(latest, req.query.playerToken);
+        const viewer = getPlayer(latest, token);
         completeRoundIfNeeded(latest);
         return toView(latest, viewer);
       });
@@ -530,18 +538,18 @@ router.post("/rush10/rooms/:code/action", async (req, res) => {
       room.message = `${player.name} laid Level ${player.phase}.`;
       recordEvent(room, player.id, "lay-phase");
     } else if (input.action === "hit") {
-      if (room.turnState !== "discard") throw new GameError("Draw a card before hitting.");
-      if (!player.hasLaidPhase) throw new GameError("Lay your own level before hitting.");
+      if (room.turnState !== "discard") throw new GameError("Draw a card before adding cards to a pile.");
+      if (!player.hasLaidPhase) throw new GameError("Lay down your own level before adding cards to a pile.");
       if (!cardIds.length || !input.meldId) throw new GameError("Choose cards and one laid-down pile.");
       const meld = room.melds.find((candidate) => candidate.id === input.meldId);
-      if (!meld) throw new GameError("That meld is no longer in the game.");
+      if (!meld) throw new GameError("That pile is no longer in the game.");
       if (new Set(cardIds).size !== cardIds.length) throw new GameError("A card can only be used once.");
       const selected = cardIds.map(id => {
         const card = player.hand.find(card => card.id === id);
         if (!card) throw new GameError("Choose cards from your hand.");
         return card;
       });
-      if (selected.some(card => card.type === "skip")) throw new GameError("Skip cards cannot be hit onto a level.");
+      if (selected.some(card => card.type === "skip")) throw new GameError("Skip cards cannot be added to a pile.");
       let low = meld.low;
       let high = meld.high;
       if (meld.type === "group") {
@@ -581,7 +589,7 @@ router.post("/rush10/rooms/:code/action", async (req, res) => {
       meld.cardIds.push(...cardIds);
       meld.cards.push(...selected);
       for (const card of selected) recordEvent(room, player.id, "hit", card);
-      room.message = `${player.name} hit ${selected.length === 1 ? "a card" : `${selected.length} cards`} onto ${room.players.find((candidate) => candidate.id === meld.ownerId)?.name ?? "a player"}'s level.`;
+      room.message = `${player.name} added ${selected.length === 1 ? "a card" : `${selected.length} cards`} to ${room.players.find((candidate) => candidate.id === meld.ownerId)?.name ?? "a player"}'s pile.`;
     } else if (input.action === "discard") {
       if (room.turnState !== "discard") throw new GameError("Draw a card before discarding.");
       if (cardIds.length !== 1) throw new GameError("Discard one card to end your turn.");

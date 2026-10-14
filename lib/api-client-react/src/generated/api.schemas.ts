@@ -235,7 +235,3 @@ export interface Rush10PlayerTokenInput {
   playerToken: string;
 }
 
-export type GetRush10RoomParams = {
-playerToken: string;
-};
-

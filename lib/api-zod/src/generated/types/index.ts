@@ -6,7 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export * from './getRush10RoomParams';
 export * from './healthStatus';
 export * from './rush10Card';
 export * from './rush10CardType';

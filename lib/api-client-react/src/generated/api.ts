@@ -20,7 +20,6 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
-  GetRush10RoomParams,
   HealthStatus,
   Rush10PlayerAction,
   Rush10PlayerTokenInput,
@@ -390,29 +389,21 @@ export const useJoinRush10Room = <TError = ErrorType<void>,
       return useMutation(getJoinRush10RoomMutationOptions(options));
     }
 
-export const getGetRush10RoomUrl = (code: string,
-    params: GetRush10RoomParams,) => {
-  const normalizedParams = new URLSearchParams();
+export const getGetRush10RoomUrl = (code: string,) => {
 
-  Object.entries(params || {}).forEach(([key, value]) => {
 
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : String(value))
-    }
-  });
 
-  const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/api/rush10/rooms/${code}?${stringifiedParams}` : `/api/rush10/rooms/${code}`
+  return `/api/rush10/rooms/${code}`
 }
 
 /**
+ * The player token goes in the Authorization header, never the URL, so polling does not write credentials to proxy access logs.
  * @summary Get the public room state and this player's hand
  */
-export const getRush10Room = async (code: string,
-    params: GetRush10RoomParams, options?: Parameters<typeof customFetch>[1]): Promise<Rush10RoomView> => {
+export const getRush10Room = async (code: string, options?: Parameters<typeof customFetch>[1]): Promise<Rush10RoomView> => {
 
-  return customFetch<Rush10RoomView>(getGetRush10RoomUrl(code,params),
+  return customFetch<Rush10RoomView>(getGetRush10RoomUrl(code),
   {
     ...options,
     method: 'GET'
@@ -425,25 +416,23 @@ export const getRush10Room = async (code: string,
 
 
 
-export const getGetRush10RoomQueryKey = (code: string,
-    params?: GetRush10RoomParams,) => {
+export const getGetRush10RoomQueryKey = (code: string,) => {
     return [
-    `/api/rush10/rooms/${code}`, ...(params ? [params] : [])
+    `/api/rush10/rooms/${code}`
     ] as const;
     }
 
 
-export const getGetRush10RoomQueryOptions = <TData = Awaited<ReturnType<typeof getRush10Room>>, TError = ErrorType<void>>(code: string,
-    params: GetRush10RoomParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRush10Room>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetRush10RoomQueryOptions = <TData = Awaited<ReturnType<typeof getRush10Room>>, TError = ErrorType<void>>(code: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRush10Room>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetRush10RoomQueryKey(code,params);
+  const queryKey =  queryOptions?.queryKey ?? getGetRush10RoomQueryKey(code);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRush10Room>>> = ({ signal }) => getRush10Room(code,params, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRush10Room>>> = ({ signal }) => getRush10Room(code, { signal, ...requestOptions });
 
 
 
@@ -461,12 +450,11 @@ export type GetRush10RoomQueryError = ErrorType<void>
  */
 
 export function useGetRush10Room<TData = Awaited<ReturnType<typeof getRush10Room>>, TError = ErrorType<void>>(
- code: string,
-    params: GetRush10RoomParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRush10Room>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ code: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRush10Room>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetRush10RoomQueryOptions(code,params,options)
+  const queryOptions = getGetRush10RoomQueryOptions(code,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

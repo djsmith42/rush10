@@ -11,7 +11,6 @@ import {
   useCreateRush10Room,
   useJoinRush10Room,
   useGetRush10Room,
-  getGetRush10RoomQueryKey,
   useStartRush10Game,
   useActInRush10Game,
 } from '@workspace/api-client-react';
@@ -22,6 +21,8 @@ import { AvatarPicker, normalizeAvatar, type AvatarKind } from '@/components/ava
 import { PlayerTile } from '@/components/room-bits';
 import { GameTable, type Perform } from '@/components/game/game-table';
 import { LobbyCardBackdrop } from '@/components/lobby-card-backdrop';
+import { errorMessage } from '@/lib/error-message';
+import { playerAuth, roomQueryKey } from '@/lib/room-query';
 
 const queryClient = new QueryClient();
 const SESSION_KEY = 'rush10-player-session';
@@ -84,7 +85,7 @@ function HomePage() {
     setJoinError('');
     createRoom.mutate({ data: { playerName: playerName.trim() } }, {
       onSuccess: enter,
-      onError: (reason) => setError(reason instanceof Error ? reason.message : 'Could not create a room. Try again.'),
+      onError: (reason) => setError(errorMessage(reason, 'Could not create a room. Try again.')),
     });
   }
 
@@ -107,7 +108,7 @@ function HomePage() {
       onError: (reason) => setJoinError(
         typeof reason === 'object' && reason !== null && 'status' in reason && reason.status === 404
           ? "There's no game with that code"
-          : reason instanceof Error ? reason.message : 'Could not join that room. Check the code.',
+          : errorMessage(reason, 'Could not join that room. Check the code.'),
       ),
     });
   }
@@ -227,8 +228,10 @@ function RoomPage() {
   const [avatarPulse, setAvatarPulse] = useState(0);
   const rulesQuery = useGetRush10Rules();
   const token = session?.roomCode.toUpperCase() === code ? session.playerToken : '';
-  const roomQuery = useGetRush10Room(code, { playerToken: token }, {
-    query: { enabled: !!code && !!token, queryKey: getGetRush10RoomQueryKey(code, { playerToken: token }), refetchInterval: 1200 },
+  const roomKey = roomQueryKey(code, session?.playerId);
+  const roomQuery = useGetRush10Room(code, {
+    query: { enabled: !!code && !!token, queryKey: roomKey, refetchInterval: 1200 },
+    request: playerAuth(token),
   });
   const startGame = useStartRush10Game();
   const act = useActInRush10Game();
@@ -254,27 +257,27 @@ function RoomPage() {
   }, [code, selfId, token, room?.status]);
 
   function updateRoom(updated: Rush10RoomView) {
-    queryClient.setQueryData(getGetRush10RoomQueryKey(code, { playerToken: token }), updated);
+    queryClient.setQueryData(roomKey, updated);
     setNotice('');
   }
 
   const perform: Perform = (action, extra = {}, onDone, onError) => {
     if (!token) { onError?.(); return; }
     setNotice('');
-    void queryClient.cancelQueries({ queryKey: getGetRush10RoomQueryKey(code, { playerToken: token }) });
+    void queryClient.cancelQueries({ queryKey: roomKey });
     act.mutate({ code, data: { playerToken: token, action, ...extra } as Rush10PlayerAction }, {
       onSuccess: (updated) => { updateRoom(updated); onDone?.(updated); },
-      onError: (reason) => { setNotice(reason instanceof Error ? reason.message : 'That move could not be played. Try again.'); onError?.(); },
+      onError: (reason) => { setNotice(errorMessage(reason, 'That move could not be played. Try again.')); onError?.(); },
     });
   };
 
   function start() {
     if (!token) return;
     setNotice('');
-    void queryClient.cancelQueries({ queryKey: getGetRush10RoomQueryKey(code, { playerToken: token }) });
+    void queryClient.cancelQueries({ queryKey: roomKey });
     startGame.mutate({ code, data: { playerToken: token } }, {
       onSuccess: updateRoom,
-      onError: (reason) => setNotice(reason instanceof Error ? reason.message : 'Could not start the game.'),
+      onError: (reason) => setNotice(errorMessage(reason, 'Could not start the game.')),
     });
   }
 
