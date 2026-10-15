@@ -1,7 +1,8 @@
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { build as esbuild } from "esbuild";
+import { spawn } from "node:child_process";
+import { context as esbuildContext } from "esbuild";
 import esbuildPluginPino from "esbuild-plugin-pino";
 import { rm } from "node:fs/promises";
 
@@ -9,12 +10,47 @@ import { rm } from "node:fs/promises";
 globalThis.require = createRequire(import.meta.url);
 
 const artifactDir = path.dirname(fileURLToPath(import.meta.url));
+const distDir = path.resolve(artifactDir, "dist");
+const watchMode = process.argv.includes("--watch");
+
+// In watch mode, (re)start the server after every successful build
+function restartServerPlugin() {
+  let server = null;
+
+  const stopServer = () =>
+    new Promise((resolve) => {
+      if (!server || server.exitCode !== null) return resolve();
+      server.once("exit", resolve);
+      server.kill("SIGTERM");
+    });
+
+  process.on("SIGINT", () => stopServer().then(() => process.exit(0)));
+  process.on("SIGTERM", () => stopServer().then(() => process.exit(0)));
+
+  return {
+    name: "restart-server",
+    setup(build) {
+      build.onEnd(async (result) => {
+        if (result.errors.length > 0) {
+          console.error("[watch] build failed, keeping previous server running");
+          return;
+        }
+        await stopServer();
+        console.log("[watch] starting server");
+        server = spawn(
+          process.execPath,
+          ["--enable-source-maps", path.join(distDir, "index.mjs")],
+          { stdio: "inherit" },
+        );
+      });
+    },
+  };
+}
 
 async function buildAll() {
-  const distDir = path.resolve(artifactDir, "dist");
   await rm(distDir, { recursive: true, force: true });
 
-  await esbuild({
+  const ctx = await esbuildContext({
     entryPoints: [path.resolve(artifactDir, "src/index.ts")],
     platform: "node",
     bundle: true,
@@ -104,7 +140,8 @@ async function buildAll() {
     sourcemap: "linked",
     plugins: [
       // pino relies on workers to handle logging, instead of externalizing it we use a plugin to handle it
-      esbuildPluginPino({ transports: ["pino-pretty"] })
+      esbuildPluginPino({ transports: ["pino-pretty"] }),
+      ...(watchMode ? [restartServerPlugin()] : []),
     ],
     // Make sure packages that are cjs only (e.g. express) but are bundled continue to work in our esm output file
     banner: {
@@ -118,6 +155,19 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
     `,
     },
   });
+
+  if (watchMode) {
+    await ctx.watch();
+    console.log("[watch] watching for changes");
+    return;
+  }
+
+  try {
+    const result = await ctx.rebuild();
+    if (result.errors.length > 0) process.exit(1);
+  } finally {
+    await ctx.dispose();
+  }
 }
 
 buildAll().catch((err) => {

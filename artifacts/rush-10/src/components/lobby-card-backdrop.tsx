@@ -18,7 +18,7 @@ function mulberry32(seed: number) {
 const COLORS = ['red', 'blue', 'green', 'yellow'] as const;
 
 /** Page-transition motion: how a card falls away, and where it flies in from. */
-type Travel = { fallX: number; fallR: number; fallD: number; fallDelay: number; inX: string; inY: string; inR: number; inD: number; inDelay: number };
+type Travel = { fallX: number; fallR: number; fallD: number; fallDelay: number; inX: string; inY: string; inYBack: string; inR: number; inD: number; inDelay: number };
 type Placed = { card: Rush10Card; left: number; top: number; rot: number; scale: number; dur: number; delay: number; dx: number; dy: number; dr: number; travel: Travel };
 
 function buildPile(cols: number, rows: number): Placed[] {
@@ -57,16 +57,15 @@ function buildPile(cols: number, rows: number): Placed[] {
   // A separate seed keeps the resting layout identical to before transitions existed.
   const fly = mulberry32(2020);
   return out.map(p => {
-    // Enter from the nearest of the top, left and right edges.
-    const fromTop = p.top < Math.min(p.left, 100 - p.left);
-    const fromLeft = !fromTop && p.left < 50;
+    // Cards enter from above (or from below when going back), the way the old pile left.
     return { ...p, travel: {
       fallX: (fly() - 0.5) * 16,
       fallR: (fly() - 0.5) * 80,
       fallD: 0.55 + fly() * 0.15,
       fallDelay: fly() * 0.18,
-      inX: fromTop ? `${((fly() - 0.5) * 30).toFixed(1)}vw` : `${(fromLeft ? -(p.left + 40) : 140 - p.left).toFixed(1)}vw`,
-      inY: fromTop ? `${(-(p.top + 45)).toFixed(1)}vh` : `${(-10 - fly() * 25).toFixed(1)}vh`,
+      inX: `${((fly() - 0.5) * 30).toFixed(1)}vw`,
+      inY: `${(-(p.top + 45)).toFixed(1)}vh`,
+      inYBack: `${(145 - p.top).toFixed(1)}vh`,
       inR: (fly() - 0.5) * 120,
       inD: 0.55 + fly() * 0.1,
       inDelay: fly() * 0.2,
@@ -99,7 +98,7 @@ function LobbyCardBackdropInner() {
           <div key={i} className="lobby-backdrop-slot" style={{
             left: `${p.left}%`, top: `${p.top}%`, '--bd-base': `translate(-50%,-50%) rotate(${p.rot.toFixed(2)}deg) scale(${p.scale.toFixed(3)})`,
             '--fall-x': `${p.travel.fallX.toFixed(1)}vw`, '--fall-r': `${p.travel.fallR.toFixed(1)}deg`, '--fall-d': `${p.travel.fallD.toFixed(2)}s`, '--fall-delay': `${p.travel.fallDelay.toFixed(2)}s`,
-            '--in-x': p.travel.inX, '--in-y': p.travel.inY, '--in-r': `${p.travel.inR.toFixed(1)}deg`, '--in-d': `${p.travel.inD.toFixed(2)}s`, '--in-delay': `${p.travel.inDelay.toFixed(2)}s`,
+            '--in-x': p.travel.inX, '--in-y': p.travel.inY, '--in-y-back': p.travel.inYBack, '--in-r': `${p.travel.inR.toFixed(1)}deg`, '--in-d': `${p.travel.inD.toFixed(2)}s`, '--in-delay': `${p.travel.inDelay.toFixed(2)}s`,
           } as CSSProperties}>
             <div className="lobby-backdrop-drift" style={{ '--bd-d': `${p.dur.toFixed(2)}s`, '--bd-delay': `${p.delay.toFixed(2)}s`, '--bd-x': `${p.dx.toFixed(1)}px`, '--bd-y': `${p.dy.toFixed(1)}px`, '--bd-r': `${p.dr.toFixed(1)}deg` } as CSSProperties}>
               <PlayingCard card={p.card} width={cardW} className="lobby-backdrop-card" />

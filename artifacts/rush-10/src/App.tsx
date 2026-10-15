@@ -233,7 +233,7 @@ function NamePage() {
     <main className="page-shell home-card-background" style={{ '--paper': '#111827' } as CSSProperties}>
       <LobbyCardBackdrop />
       <div className="page-content mx-auto max-w-xl px-5 pb-16 pt-4 md:pt-6">
-        <button onClick={() => go('/')} aria-label="Back to Rush 10" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#334155] hover:bg-[#1E293B]"><ArrowLeft size={16} /></button>
+        <button onClick={() => go('/', { back: true })} aria-label="Back to Rush 10" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#334155] hover:bg-[#1E293B]"><ArrowLeft size={16} /></button>
         <form onSubmit={submit} noValidate className="pt-16 md:pt-24">
           {others.length > 0 && <h1 className="mb-10 text-3xl font-bold tracking-[-.04em] text-white" data-testid="text-joining-players">Joining a game with {new Intl.ListFormat('en', { type: 'conjunction' }).format(others)}</h1>}
           <label className="block">
@@ -394,7 +394,7 @@ function RoomPage() {
   if (!token) return (
     <main className="page-shell" style={{ '--paper': '#111827' } as CSSProperties}>
       <div className="page-content mx-auto max-w-xl px-5 py-16">
-        <button onClick={() => go('/')} className="mb-8 flex items-center gap-2 text-sm font-semibold"><ArrowLeft size={16} /> Back to Rush 10</button>
+        <button onClick={() => go('/', { back: true })} className="mb-8 flex items-center gap-2 text-sm font-semibold"><ArrowLeft size={16} /> Back to Rush 10</button>
         <div className="rounded-[26px] border-2 border-white/10 bg-[#1E293B] p-7 shadow-[var(--shadow-card)]">
           <p className="font-mono text-xs uppercase tracking-[.18em] text-[#94A3B8]">Room {code}</p>
           <h1 className="mt-2 text-3xl font-bold tracking-[-.06em]">You’ll need your seat token.</h1>
@@ -450,7 +450,7 @@ function RoomPage() {
       <div className="page-content mx-auto max-w-[1400px] px-4 pb-12 pt-4 md:px-8 md:pt-6">
         <header className="mb-5 flex flex-wrap items-center justify-between gap-3 pb-4">
           <div className="flex items-center gap-3">
-            <button onClick={() => go('/')} aria-label="Back to lobby" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#334155] hover:bg-[#1E293B]"><ArrowLeft size={16} /></button>
+            <button onClick={() => go('/', { back: true })} aria-label="Back to lobby" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#334155] hover:bg-[#1E293B]"><ArrowLeft size={16} /></button>
             <a href="/" className="text-[17px] font-bold tracking-[-.06em] text-white no-underline">RUSH<span className="text-[#FF3366]">10</span></a>
           </div>
         </header>
