@@ -270,7 +270,7 @@ Production runs at https://thesmithfam.org/rush10 behind Apache on this server:
 - Database: /var/lib/rush10/rush10.db, outside any web-served directory. The API creates the table on startup.
 - Frontend is built with BASE_PATH=/rush10/ and copied to /home/vhosts/thesmithfam.org/rush10; Apache provides SPA fallback.
 - Apache proxies /rush10/api to the API; plain HTTP redirects /rush10 to HTTPS.
-- Config files and the deploy script are in deploy/. Redeploy with ./deploy/deploy.sh.
+- Config files and the deploy logic are in scripts/deploy/. Redeploy with ./deploy.
 - Database backups are not yet configured.
 - Do not expose test tooling publicly without reviewing its suitability.
 - Player sessions are browser-local and do not transfer between domains.

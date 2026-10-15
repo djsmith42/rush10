@@ -10,7 +10,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const api = path.join(root, "artifacts/api-server");
 const web = path.join(root, "artifacts/rush-10");
 const webOut = path.join(web, "dist/public");

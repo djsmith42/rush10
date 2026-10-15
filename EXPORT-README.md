@@ -14,7 +14,7 @@ Install dependencies from this workspace root with `pnpm install --frozen-lockfi
 
 ## Hosting notes
 Set DATABASE_PATH to the SQLite file location (outside any web-served directory); the API creates the file and table on startup. Run the API with NODE_ENV=production, PORT and DATABASE_PATH set (optionally HOST=127.0.0.1 behind a proxy) using `pnpm --filter @workspace/api-server start`.
-The thesmithfam.org/rush10 deployment (systemd unit, Apache snippet, deploy script) is in `deploy/`; redeploy with `./deploy/deploy.sh`.
+The thesmithfam.org/rush10 deployment (systemd unit, Apache snippet, deploy logic) is in `scripts/deploy/`; redeploy with `./deploy`.
 Serve the frontend build output with a production web server and proxy /api requests to the API. Configure SPA fallback for /game/:code links. Check vite.config.ts for the configured build output directory.
 This is a source export, not a preconfigured standalone deployment.
 
