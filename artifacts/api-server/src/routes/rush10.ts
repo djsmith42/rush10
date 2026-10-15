@@ -148,19 +148,19 @@ function makeDeck(): GameCard[] {
 }
 
 function requireRoom(room: GameRoom | undefined) {
-  if (!room) throw new GameError("That room could not be found.", 404);
+  if (!room) throw new GameError("That game could not be found.", 404);
   return room;
 }
 
 function assertJoinable(room: GameRoom) {
   if (room.status !== "waiting") throw new GameError("This game has already started. Rejoin with your saved player session.");
-  if (room.players.length >= 6) throw new GameError("This room already has six players.");
+  if (room.players.length >= 6) throw new GameError("This game already has six players.");
 }
 
 function getPlayer(room: GameRoom, token: unknown) {
   if (typeof token !== "string" || !token) throw new GameError("Your player session is missing.", 403);
   const player = room.players.find((candidate) => candidate.token === token);
-  if (!player) throw new GameError("That player session is not valid for this room.", 403);
+  if (!player) throw new GameError("That player session is not valid for this game.", 403);
   return player;
 }
 
@@ -547,7 +547,7 @@ router.post("/rush10/rooms", async (req, res) => {
       if (await createStoredRoom(room)) { saved = true; break; }
       room.code = makeRoomCode();
     }
-    if (!saved) throw new GameError("Could not allocate a room code. Please try again.", 503);
+    if (!saved) throw new GameError("Could not allocate a game code. Please try again.", 503);
     res.status(201).json({ roomCode: room.code, playerToken: host.token, playerId: host.id, room: toView(room, host) });
   } catch (error) {
     handleError(res, error);
@@ -562,7 +562,7 @@ router.post("/rush10/test-rooms", async (req, res) => {
       const candidate = seedTestRoom(makeRoomCode(), input.scenario, input.playerCount);
       if (await createStoredRoom(candidate)) room = candidate;
     }
-    if (!room) throw new GameError("Could not allocate a room code. Please try again.", 503);
+    if (!room) throw new GameError("Could not allocate a game code. Please try again.", 503);
     res.status(201).json({
       roomCode: room.code,
       sessions: room.players.map(player => ({ playerId: player.id, playerToken: player.token, name: player.name })),
@@ -583,7 +583,7 @@ router.post("/rush10/rooms/:code/join", async (req, res) => {
     const player: GamePlayer = { id: randomUUID(), token: randomUUID(), name, phase: 1, score: 0, hand: [], isHost: false, hasLaidPhase: false };
     player.avatar = randomAvailableAvatar(room.players);
     room.players.push(player);
-    room.message = `${name} joined the room.`;
+    room.message = `${name} joined the game.`;
     return { roomCode: room.code, playerToken: player.token, playerId: player.id, room: toView(room, player) };
     });
     res.json(response);
@@ -632,7 +632,7 @@ router.post("/rush10/rooms/:code/start", async (req, res) => {
     const input = StartRush10GameBody.parse(req.body);
     const player = getPlayer(room, input.playerToken);
     if (player.id !== room.hostPlayerId) throw new GameError("Only the host can start the game.", 403);
-    if (room.status === "finished") throw new GameError("This game has finished. Create a new room.");
+    if (room.status === "finished") throw new GameError("This game has finished. Start a new game.");
     if (room.status === "waiting" && room.players.length < 2) throw new GameError("At least two players are needed to start.");
     if (room.status === "playing") throw new GameError("The game is already in progress.");
     if (room.status === "round-over" && room.currentPlayerId === null) {

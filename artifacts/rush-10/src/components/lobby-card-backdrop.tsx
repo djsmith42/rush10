@@ -73,6 +73,17 @@ function buildPile(cols: number, rows: number): Placed[] {
   });
 }
 
+/**
+ * Every independently animated card is its own GPU layer; hundreds of them exhaust GPU memory and
+ * the browser starts dropping layers, so hovered elements flicker out. A few drift groups look the same under the blur.
+ */
+const DRIFT_GROUPS = 4;
+function groupPile(pile: Placed[]) {
+  const groups: { p: Placed; i: number }[][] = Array.from({ length: DRIFT_GROUPS }, () => []);
+  pile.forEach((p, i) => groups[i % DRIFT_GROUPS].push({ p, i }));
+  return groups;
+}
+
 function gridFor(width: number) {
   if (width < 520) return { cols: 4, rows: 7, cardW: 110 };
   if (width < 1024) return { cols: 6, rows: 6, cardW: 135 };
@@ -90,23 +101,30 @@ function LobbyCardBackdropInner() {
   }, []);
   const { cols, rows, cardW } = gridFor(width);
   const pile = useMemo(() => buildPile(cols, rows), [cols, rows]);
+  const groups = useMemo(() => groupPile(pile), [pile]);
 
   return (
     <div className="lobby-backdrop" data-motion={animate ? 'animated' : 'paused'} aria-hidden="true" inert>
       {/* Sits under the pile: hidden at rest, revealed whenever the cards fall away. */}
       <div className="lobby-backdrop-hero brand-wordmark">RUSH 10</div>
       <div className="lobby-backdrop-pile">
-        {pile.map((p, i) => (
-          <div key={i} className="lobby-backdrop-slot" style={{
-            left: `${p.left}%`, top: `${p.top}%`, '--bd-base': `translate(-50%,-50%) rotate(${p.rot.toFixed(2)}deg) scale(${p.scale.toFixed(3)})`,
-            '--fall-x': `${p.travel.fallX.toFixed(1)}vw`, '--fall-r': `${p.travel.fallR.toFixed(1)}deg`, '--fall-d': `${p.travel.fallD.toFixed(2)}s`, '--fall-delay': `${p.travel.fallDelay.toFixed(2)}s`,
-            '--in-x': p.travel.inX, '--in-y': p.travel.inY, '--in-y-back': p.travel.inYBack, '--in-r': `${p.travel.inR.toFixed(1)}deg`, '--in-d': `${p.travel.inD.toFixed(2)}s`, '--in-delay': `${p.travel.inDelay.toFixed(2)}s`,
-          } as CSSProperties}>
-            <div className="lobby-backdrop-drift" style={{ '--bd-d': `${p.dur.toFixed(2)}s`, '--bd-delay': `${p.delay.toFixed(2)}s`, '--bd-x': `${p.dx.toFixed(1)}px`, '--bd-y': `${p.dy.toFixed(1)}px`, '--bd-r': `${p.dr.toFixed(1)}deg` } as CSSProperties}>
-              <PlayingCard card={p.card} width={cardW} className="lobby-backdrop-card" />
+        {groups.map((group, g) => {
+          // Each group drifts as one layer, steered by its first card's motion with a gentler tilt.
+          const lead = group[0].p;
+          return (
+            <div key={g} className="lobby-backdrop-drift" style={{ '--bd-d': `${lead.dur.toFixed(2)}s`, '--bd-delay': `${lead.delay.toFixed(2)}s`, '--bd-x': `${lead.dx.toFixed(1)}px`, '--bd-y': `${lead.dy.toFixed(1)}px`, '--bd-r': `${(lead.dr * 0.15).toFixed(2)}deg` } as CSSProperties}>
+              {group.map(({ p, i }) => (
+                <div key={i} className="lobby-backdrop-slot" style={{
+                  left: `${p.left}%`, top: `${p.top}%`, '--bd-base': `translate(-50%,-50%) rotate(${p.rot.toFixed(2)}deg) scale(${p.scale.toFixed(3)})`,
+                  '--fall-x': `${p.travel.fallX.toFixed(1)}vw`, '--fall-r': `${p.travel.fallR.toFixed(1)}deg`, '--fall-d': `${p.travel.fallD.toFixed(2)}s`, '--fall-delay': `${p.travel.fallDelay.toFixed(2)}s`,
+                  '--in-x': p.travel.inX, '--in-y': p.travel.inY, '--in-y-back': p.travel.inYBack, '--in-r': `${p.travel.inR.toFixed(1)}deg`, '--in-d': `${p.travel.inD.toFixed(2)}s`, '--in-delay': `${p.travel.inDelay.toFixed(2)}s`,
+                } as CSSProperties}>
+                  <PlayingCard card={p.card} width={cardW} className="lobby-backdrop-card" />
+                </div>
+              ))}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <div className="lobby-backdrop-shade" />
     </div>

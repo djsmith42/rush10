@@ -192,7 +192,7 @@ Home page:
 - Keep reconnect beneath the Join controls.
 - Pressing Enter in the NAME field must do NOTHING.
 - Creating a game uses an explicit button, not an implicitly submitted form.
-- Enter in the ROOM CODE field still joins.
+- Enter in the GAME CODE field still joins.
 - A nonexistent code shows “There's no game with that code” under the join controls, not a raw HTTP error.
 
 Lobby:

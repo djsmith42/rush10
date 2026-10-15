@@ -266,7 +266,7 @@ input::placeholder { color:#64748B; }
 }
 .lobby-backdrop-pile { position:absolute; inset:-6%; filter:blur(9px); transform:translateZ(0); }
 .lobby-backdrop-slot { position:absolute; transform:var(--bd-base); }
-.lobby-backdrop-drift { will-change:transform; }
+.lobby-backdrop-drift { position:absolute; inset:0; will-change:transform; }
 .lobby-backdrop[data-motion="paused"] .lobby-backdrop-drift { animation-play-state:paused; will-change:auto; }
 .lobby-backdrop-card { box-shadow:0 14px 30px rgba(0,0,0,.45); }
 .lobby-backdrop-shade { position:absolute; inset:0; background:rgb(10 14 26 / .80); }

@@ -108,7 +108,7 @@ function HomePage() {
       await checkRush10RoomJoinable(code);
       go(`/join/${code}`);
     } catch (reason) {
-      setJoinError(isNotFound(reason) ? "There's no game with that code" : errorMessage(reason, 'Could not join that room. Check the code.'));
+      setJoinError(isNotFound(reason) ? "There's no game with that code" : errorMessage(reason, 'Could not join that game. Check the code.'));
       setChecking(false);
     }
   }
@@ -143,12 +143,12 @@ function HomePage() {
             <form onSubmit={join} noValidate className="mx-auto w-full max-w-sm">
               <h2 className="mb-5 text-2xl font-bold tracking-tight">Join a Game</h2>
               <div className="flex gap-2">
-              <input aria-label="Room code" value={roomCode} onChange={(e) => setRoomCode(e.target.value.trim().toUpperCase().slice(0, 4))} required minLength={4} maxLength={4} pattern="[ABCDEFGHJKMNPRSTUVWXYZ]{4}" title="Enter the four-letter room code (no I, L, O, Q or numbers)." autoCapitalize="characters" autoCorrect="off" spellCheck={false} placeholder="ROOM CODE" data-testid="input-room-code" className="h-12 min-w-0 flex-1 rounded-xl border border-[#334155] bg-[#0F172A] px-4 font-mono text-sm font-medium uppercase tracking-[.17em] outline-none placeholder:text-[#94A3B8] focus:border-[#2979FF]" />
+              <input aria-label="Game code" value={roomCode} onChange={(e) => setRoomCode(e.target.value.trim().toUpperCase().slice(0, 4))} required minLength={4} maxLength={4} pattern="[ABCDEFGHJKMNPRSTUVWXYZ]{4}" title="Enter the four-letter game code (no I, L, O, Q or numbers)." autoCapitalize="characters" autoCorrect="off" spellCheck={false} placeholder="GAME CODE" data-testid="input-room-code" className="h-12 min-w-0 flex-1 rounded-xl border border-[#334155] bg-[#0F172A] px-4 font-mono text-sm font-medium uppercase tracking-[.17em] outline-none placeholder:text-[#94A3B8] focus:border-[#2979FF]" />
               <button type="submit" disabled={checking} data-testid="button-join-room" className="flex h-12 items-center gap-2 rounded-xl border-2 border-white/10 px-4 font-bold transition hover:bg-[#A3E635] hover:text-[#111827] hover:border-[#A3E635] disabled:cursor-not-allowed disabled:opacity-45">{checking ? <><LoaderCircle size={16} className="animate-spin" /> Joining…</> : <>Join <ArrowRight size={16} /></>}</button>
               </div>
               {joinError && <p role="alert" className="mt-3 text-sm text-[#FF8FAB]">{joinError}</p>}
               {saved && <button type="button" onClick={() => go(`/game/${saved.roomCode}`)} data-testid="button-reconnect" className="mt-4 flex w-full items-center justify-between gap-2 rounded-xl bg-[#A3E635]/15 px-4 py-3 text-left text-sm font-semibold text-[#A3E635]">
-                <span><RefreshCw size={14} className="mr-2 inline" /> Reconnect to room <span className="mono">{saved.roomCode}</span></span><ArrowRight size={16} className="shrink-0" />
+                <span><RefreshCw size={14} className="mr-2 inline" /> Reconnect to game <span className="mono">{saved.roomCode}</span></span><ArrowRight size={16} className="shrink-0" />
               </button>}
             </form>
             </div>
@@ -219,7 +219,7 @@ function NamePage() {
     if (joining) {
       joinRoom.mutate({ code, data: { playerName: name } }, {
         onSuccess: enter,
-        onError: (reason) => setError(isNotFound(reason) ? "There's no game with that code" : errorMessage(reason, 'Could not join that room. Try again.')),
+        onError: (reason) => setError(isNotFound(reason) ? "There's no game with that code" : errorMessage(reason, 'Could not join that game. Try again.')),
       });
     } else {
       createRoom.mutate({ data: { playerName: name } }, {
@@ -369,7 +369,7 @@ function RoomPage() {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1800);
     } catch {
-      setNotice(`Room code: ${code}`);
+      setNotice(`Game code: ${code}`);
     }
   }
 
@@ -406,9 +406,9 @@ function RoomPage() {
       <div className="page-content mx-auto max-w-xl px-5 py-16">
         <div className="mb-8"><BackHome onClick={() => go('/', { back: true })} /></div>
         <div className="rounded-[26px] border-2 border-white/10 bg-[#1E293B] p-7 shadow-[var(--shadow-card)]">
-          <p className="font-mono text-xs uppercase tracking-[.18em] text-[#94A3B8]">Room {code}</p>
+          <p className="font-mono text-xs uppercase tracking-[.18em] text-[#94A3B8]">Game {code}</p>
           <h1 className="mt-2 text-3xl font-bold tracking-[-.06em]">You’ll need your seat token.</h1>
-          <p className="mt-3 text-sm leading-relaxed text-[#94A3B8]">This browser doesn’t have a saved player session for this room. Rejoin from the home page, or return on the device where you started.</p>
+          <p className="mt-3 text-sm leading-relaxed text-[#94A3B8]">This browser doesn’t have a saved player session for this game. Rejoin from the home page, or return on the device where you started.</p>
           <button onClick={() => go('/')} className="mt-6 rounded-xl bg-[#FF3366] px-5 py-3 font-bold text-white">Go to the lobby <ArrowRight className="ml-2 inline" size={16} /></button>
         </div>
       </div>
@@ -418,7 +418,7 @@ function RoomPage() {
   if (roomQuery.isError) return (
     <main className="page-shell" style={{ '--paper': '#111827' } as CSSProperties}>
       <div className="page-content mx-auto max-w-xl px-5 py-20 text-center">
-        <div className="rounded-[26px] border-2 border-white/10 bg-[#1E293B] p-8 shadow-[var(--shadow-card)]"><h1 className="text-3xl font-bold">Can't find your game</h1><p className="mt-3 text-[#94A3B8]">The room may have closed, or this seat needs reconnecting.</p><button onClick={() => roomQuery.refetch()} className="mt-5 rounded-xl bg-[#FF3366] px-5 py-3 font-bold text-white"><RefreshCw className="mr-2 inline" size={16} /> Try again</button></div>
+        <div className="rounded-[26px] border-2 border-white/10 bg-[#1E293B] p-8 shadow-[var(--shadow-card)]"><h1 className="text-3xl font-bold">Can't find your game</h1><p className="mt-3 text-[#94A3B8]">The game may have closed, or this seat needs reconnecting.</p><button onClick={() => roomQuery.refetch()} className="mt-5 rounded-xl bg-[#FF3366] px-5 py-3 font-bold text-white"><RefreshCw className="mr-2 inline" size={16} /> Try again</button></div>
       </div>
     </main>
   );
@@ -465,7 +465,7 @@ function RoomPage() {
           <section className="w-[598px] max-w-full py-5 md:py-8">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <h1 className="text-4xl font-bold tracking-[-.07em]">Invite players to join</h1>
-              <button onClick={copyCode} aria-label={copied ? 'Room code copied' : 'Copy room code'} className="flex items-center gap-2 rounded-xl bg-[#4F46E5] px-4 py-3 font-mono text-sm font-bold tracking-[.14em] text-white hover:bg-[#6366F1]">Room code: {code}{copied ? <Check size={16} /> : <Clipboard size={16} />}</button>
+              <button onClick={copyCode} aria-label={copied ? 'Game code copied' : 'Copy game code'} className="flex items-center gap-2 rounded-xl bg-[#4F46E5] px-4 py-3 font-mono text-sm font-bold tracking-[.14em] text-white hover:bg-[#6366F1]">Game code: {code}{copied ? <Check size={16} /> : <Clipboard size={16} />}</button>
             </div>
             {self && <label className="mt-7 block">
               <span className="mb-3 block text-xs font-bold tracking-[.12em] text-[#94A3B8]">your name</span>
