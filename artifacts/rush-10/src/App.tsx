@@ -118,8 +118,8 @@ function HomePage() {
       <div className="page-content mx-auto max-w-[1220px] px-5 pb-16 pt-4 md:px-10">
         <section className="grid items-center gap-12 pb-0 pt-0 md:grid-cols-[1.03fr_.97fr] md:gap-8">
           <div className="fade-up">
-            <h1 className="max-w-[660px] text-[clamp(3.7rem,9vw,7.4rem)] font-bold leading-[.82] tracking-[-.09em] text-white">
-              RUSH 10:
+            <h1 className="brand-wordmark origin-left text-[clamp(4.4rem,11vw,9rem)]">
+              RUSH 10
             </h1>
             <p className="mt-4 text-[1.4rem] font-semibold text-[#FF3366]">A free online card game for 2–6 players</p>
           </div>
@@ -233,7 +233,7 @@ function NamePage() {
     <main className="page-shell home-card-background" style={{ '--paper': '#111827' } as CSSProperties}>
       <LobbyCardBackdrop />
       <div className="page-content mx-auto max-w-xl px-5 pb-16 pt-4 md:pt-6">
-        <button onClick={() => go('/', { back: true })} aria-label="Back to Rush 10" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#334155] hover:bg-[#1E293B]"><ArrowLeft size={16} /></button>
+        <BackHome onClick={() => go('/', { back: true })} />
         <form onSubmit={submit} noValidate className="pt-16 md:pt-24">
           {others.length > 0 && <h1 className="mb-10 text-3xl font-bold tracking-[-.04em] text-white" data-testid="text-joining-players">Joining a game with {new Intl.ListFormat('en', { type: 'conjunction' }).format(others)}</h1>}
           <label className="block">
@@ -258,6 +258,16 @@ const heroCards = [
   { top: 'WILD', mid: '?', bottom: 'ANY COLOR', suit: 'wild' },
   { top: 'RUSH 10', mid: '10', bottom: 'LEVEL 10', suit: 'red' },
 ];
+
+/** Top-left way home on the setup screens: a back arrow beside the Rush 10 wordmark. */
+function BackHome({ onClick }: { onClick: () => void }) {
+  return (
+    <button onClick={onClick} aria-label="Back to Rush 10" className="-m-1.5 flex items-center gap-3 rounded-2xl border border-transparent p-1.5 pr-3 transition hover:border-white/40 focus-visible:border-white/60 focus-visible:outline-none">
+      <span className="flex h-9 w-6 items-center justify-center"><ArrowLeft size={16} /></span>
+      <span aria-hidden="true" className="brand-wordmark text-[30px]">RUSH 10</span>
+    </button>
+  );
+}
 
 function HeroFan() {
   const mid = (heroCards.length - 1) / 2;
@@ -394,7 +404,7 @@ function RoomPage() {
   if (!token) return (
     <main className="page-shell" style={{ '--paper': '#111827' } as CSSProperties}>
       <div className="page-content mx-auto max-w-xl px-5 py-16">
-        <button onClick={() => go('/', { back: true })} className="mb-8 flex items-center gap-2 text-sm font-semibold"><ArrowLeft size={16} /> Back to Rush 10</button>
+        <div className="mb-8"><BackHome onClick={() => go('/', { back: true })} /></div>
         <div className="rounded-[26px] border-2 border-white/10 bg-[#1E293B] p-7 shadow-[var(--shadow-card)]">
           <p className="font-mono text-xs uppercase tracking-[.18em] text-[#94A3B8]">Room {code}</p>
           <h1 className="mt-2 text-3xl font-bold tracking-[-.06em]">You’ll need your seat token.</h1>
@@ -448,13 +458,10 @@ function RoomPage() {
       <LobbyCardBackdrop />
       {notice && bannerEl}
       <div className="page-content mx-auto max-w-[1400px] px-4 pb-12 pt-4 md:px-8 md:pt-6">
-        <header className="mb-5 flex flex-wrap items-center justify-between gap-3 pb-4">
-          <div className="flex items-center gap-3">
-            <button onClick={() => go('/', { back: true })} aria-label="Back to lobby" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#334155] hover:bg-[#1E293B]"><ArrowLeft size={16} /></button>
-            <a href="/" className="text-[17px] font-bold tracking-[-.06em] text-white no-underline">RUSH<span className="text-[#FF3366]">10</span></a>
-          </div>
-        </header>
         <div className="mx-auto w-fit max-w-full">
+          <header className="mb-5 flex flex-wrap items-center justify-between gap-3 pb-4">
+            <BackHome onClick={() => go('/', { back: true })} />
+          </header>
           <section className="w-[598px] max-w-full py-5 md:py-8">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <h1 className="text-4xl font-bold tracking-[-.07em]">Invite players to join</h1>
@@ -479,7 +486,7 @@ function RoomPage() {
               {room.players.length < 6 && <div className="flex min-h-[74px] items-center gap-3 px-3 text-sm font-semibold text-white drop-shadow-[0_2px_4px_rgba(0,0,0,1)]"><div className="flex h-10 w-10 items-center justify-center"><Users size={16} /></div>Waiting for a player...</div>}
             </div>
             <div className="mt-8 flex flex-col items-center gap-4 py-4 text-center">
-              {room.hostPlayerId === self?.id ? <button onClick={start} disabled={isBusy || room.players.length < 2} data-testid="button-start-game" className="flex items-center justify-center gap-2 rounded-xl border-2 border-white bg-[#FF3366] px-6 py-3 font-bold text-white opacity-100 shadow-[0_8px_24px_rgba(0,0,0,.8),0_0_0_3px_rgba(17,24,39,.9)] transition enabled:hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-100">{startGame.isPending ? <LoaderCircle size={17} className="animate-spin" /> : <ArrowRight size={17} />} Start game</button> : <div className="flex items-center gap-2 text-xs font-semibold text-[#94A3B8]"><LoaderCircle size={15} className="animate-spin" /> Waiting for the host to deal</div>}
+              {room.hostPlayerId === self?.id ? <button onClick={start} disabled={isBusy || room.players.length < 2} data-testid="button-start-game" className={`flex items-center justify-center gap-2 rounded-xl border-2 px-6 py-3 font-bold opacity-100 shadow-[0_8px_24px_rgba(0,0,0,.8),0_0_0_3px_rgba(17,24,39,.9)] transition enabled:hover:translate-y-[-1px] disabled:opacity-100 ${room.players.length < 2 ? 'cursor-default! border-[#64748B] bg-[#475569] text-[#CBD5E1]' : 'border-white bg-[#FF3366] text-white disabled:cursor-not-allowed'}`}>{startGame.isPending ? <LoaderCircle size={17} className="animate-spin" /> : <ArrowRight size={17} />} Start game</button> : <div className="flex items-center gap-2 text-xs font-semibold text-[#94A3B8]"><LoaderCircle size={15} className="animate-spin" /> Waiting for the host to deal</div>}
               {room.players.length < 2 && <div><p className="text-sm font-bold">Need at least one more player</p><p className="mt-1 text-xs text-[#94A3B8]">Rush 10 is for 2–6 players.</p></div>}
             </div>
           </section>
