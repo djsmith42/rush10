@@ -1,6 +1,6 @@
-import { memo, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { Rush10Card } from '@workspace/api-client-react';
-import { PlayingCard } from '@/components/cards';
+import { CARD_FACE, FACE_W, PlayingCard, SUIT, cardHeight, isSpecial, suitLabel, suitOf } from '@/components/cards';
 import { useBackgroundMotion } from './use-background-motion';
 
 /** Deterministic PRNG so the pile never reshuffles between renders/polls. */
@@ -74,14 +74,120 @@ function buildPile(cols: number, rows: number): Placed[] {
 }
 
 /**
- * Every independently animated card is its own GPU layer; hundreds of them exhaust GPU memory and
- * the browser starts dropping layers, so hovered elements flicker out. A few drift groups look the same under the blur.
+ * Overlapping cards inside a composited layer each get their own GPU layer; hundreds of them exhaust GPU memory
+ * and the browser starts dropping layers, so hovered elements flicker out. At rest each drift group is painted
+ * into one canvas instead, and the card elements only show while a page transition moves them.
  */
 const DRIFT_GROUPS = 4;
+type Group = { p: Placed; i: number }[];
 function groupPile(pile: Placed[]) {
-  const groups: { p: Placed; i: number }[][] = Array.from({ length: DRIFT_GROUPS }, () => []);
+  const groups: Group[] = Array.from({ length: DRIFT_GROUPS }, () => []);
   pile.forEach((p, i) => groups[i % DRIFT_GROUPS].push({ p, i }));
   return groups;
+}
+
+const SEVEN = typeof Path2D === 'undefined' ? null : new Path2D('M8 6H42L20 60H9L31 16H6Z M10 32H33L30 39H7Z');
+
+/** Draws a label the way CardInside sets it, centred on (x, y); the crossed seven is its SVG path. */
+function drawGlyph(ctx: CanvasRenderingContext2D, card: Rush10Card, text: string, size: number, x: number, y: number) {
+  if (card.type === 'number' && card.value === 7 && SEVEN) {
+    ctx.save();
+    ctx.translate(x - 0.32 * size, y - 0.45 * size);
+    ctx.scale(0.64 * size / 44, 0.9 * size / 64);
+    ctx.fill(SEVEN);
+    ctx.restore();
+    return;
+  }
+  ctx.font = `${size}px Bangers, sans-serif`;
+  ctx.fillText(text, x, y);
+}
+
+function glyphWidth(ctx: CanvasRenderingContext2D, card: Rush10Card, text: string, size: number) {
+  if (card.type === 'number' && card.value === 7) return 0.64 * size;
+  ctx.font = `${size}px Bangers, sans-serif`;
+  return ctx.measureText(text).width;
+}
+
+/** A canvas copy of PlayingCard at (0, 0): close enough to swap with the real cards under the blur. */
+function drawCard(ctx: CanvasRenderingContext2D, card: Rush10Card, width: number, scale: number) {
+  const height = cardHeight(width);
+  const suit = suitOf(card, 0);
+  const label = card.type === 'wild' ? 'W' : card.type === 'skip' ? 'SKIP' : String(card.value ?? '?');
+  let fill: string | CanvasGradient = CARD_FACE;
+  if (suit === 'wild') {
+    fill = ctx.createLinearGradient(0, 0, width, height);
+    fill.addColorStop(0, '#8B5CF6');
+    fill.addColorStop(1, '#EC4899');
+  } else if (suit === 'skip') fill = SUIT.skip;
+  ctx.beginPath();
+  ctx.roundRect(0, 0, width, height, width * 0.157);
+  ctx.shadowColor = 'rgba(0,0,0,.45)';
+  ctx.shadowBlur = 30;
+  ctx.shadowOffsetY = 14 * scale;
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.beginPath();
+  ctx.roundRect(1, 1, width - 2, height - 2, width * 0.157 - 1);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#CBD5E1';
+  ctx.stroke();
+
+  // Face coordinates: the 79x122 face with its 8px padding, scaled like ScaledFace.
+  ctx.translate(2, 2);
+  ctx.scale((width - 4) / FACE_W, (width - 4) / FACE_W);
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = suitLabel(suit);
+  const cornerW = glyphWidth(ctx, card, label, 15);
+  drawGlyph(ctx, card, label, 15, 8 + cornerW / 2, 15.5);
+  ctx.save();
+  ctx.translate(71 - cornerW / 2, 106.5);
+  ctx.rotate(Math.PI);
+  drawGlyph(ctx, card, label, 15, 0, 0);
+  ctx.restore();
+  if (isSpecial(suit)) {
+    ctx.fillStyle = '#FFFFFF';
+    ctx.shadowColor = 'rgba(0,0,0,.25)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetY = 2 * scale;
+  }
+  drawGlyph(ctx, card, label, card.type === 'skip' ? 29 : 55, 39.5, 61);
+  ctx.shadowColor = 'transparent';
+}
+
+/** One drift group's cards at rest, painted once (and again on resize) into a single canvas. */
+function PileCanvas({ group, cardW }: { group: Group; cardW: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    const box = canvas?.parentElement;
+    if (!canvas || !box) return;
+    let cancelled = false;
+    const paint = () => {
+      if (cancelled) return;
+      const w = box.clientWidth, h = box.clientHeight;
+      // Device pixels would be wasted under the 9px blur.
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      for (const { p } of group) {
+        ctx.save();
+        ctx.translate(p.left / 100 * w, p.top / 100 * h);
+        ctx.rotate(p.rot * Math.PI / 180);
+        ctx.scale(p.scale, p.scale);
+        ctx.translate(-cardW / 2, -cardHeight(cardW) / 2);
+        drawCard(ctx, p.card, cardW, p.scale);
+        ctx.restore();
+      }
+    };
+    document.fonts.load('15px Bangers').catch(() => undefined).then(paint);
+    const observer = new ResizeObserver(paint);
+    observer.observe(box);
+    return () => { cancelled = true; observer.disconnect(); };
+  }, [group, cardW]);
+  return <canvas ref={ref} className="lobby-backdrop-paint" />;
 }
 
 function gridFor(width: number) {
@@ -113,6 +219,7 @@ function LobbyCardBackdropInner() {
           const lead = group[0].p;
           return (
             <div key={g} className="lobby-backdrop-drift" style={{ '--bd-d': `${lead.dur.toFixed(2)}s`, '--bd-delay': `${lead.delay.toFixed(2)}s`, '--bd-x': `${lead.dx.toFixed(1)}px`, '--bd-y': `${lead.dy.toFixed(1)}px`, '--bd-r': `${(lead.dr * 0.15).toFixed(2)}deg` } as CSSProperties}>
+              <PileCanvas group={group} cardW={cardW} />
               {group.map(({ p, i }) => (
                 <div key={i} className="lobby-backdrop-slot" style={{
                   left: `${p.left}%`, top: `${p.top}%`, '--bd-base': `translate(-50%,-50%) rotate(${p.rot.toFixed(2)}deg) scale(${p.scale.toFixed(3)})`,

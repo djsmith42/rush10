@@ -265,7 +265,11 @@ input::placeholder { color:#64748B; }
   font-size:clamp(5rem,22vw,20rem);
 }
 .lobby-backdrop-pile { position:absolute; inset:-6%; filter:blur(9px); transform:translateZ(0); }
-.lobby-backdrop-slot { position:absolute; transform:var(--bd-base); }
+.lobby-backdrop-slot { position:absolute; transform:var(--bd-base); display:none; }
+.lobby-backdrop-paint { position:absolute; inset:0; width:100%; height:100%; }
+/* At rest the canvases stand in for the cards; the cards only show while a transition moves them. */
+.route-stage:not([data-transition="idle"]) .lobby-backdrop-slot { display:block; }
+.route-stage:not([data-transition="idle"]) .lobby-backdrop-paint { display:none; }
 .lobby-backdrop-drift { position:absolute; inset:0; will-change:transform; }
 .lobby-backdrop[data-motion="paused"] .lobby-backdrop-drift { animation-play-state:paused; will-change:auto; }
 .lobby-backdrop-card { box-shadow:0 14px 30px rgba(0,0,0,.45); }
