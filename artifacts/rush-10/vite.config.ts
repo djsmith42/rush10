@@ -57,6 +57,10 @@ export default defineConfig({
     strictPort: true,
     host: '0.0.0.0',
     allowedHosts: true,
+    // Local development only: production proxies /api through Apache.
+    proxy: {
+      '/api': `http://localhost:${process.env.API_PORT ?? 3010}`,
+    },
     fs: {
       strict: true,
     },
