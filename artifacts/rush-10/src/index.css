@@ -257,6 +257,12 @@ input::placeholder { color:#64748B; }
 /* ---------- Waiting-room backdrop (decorative) ---------- */
 .lobby-backdrop { position:fixed; inset:0; z-index:0; overflow:hidden; pointer-events:none; user-select:none; }
 .lobby-backdrop * { pointer-events:none !important; }
+.lobby-backdrop-hero {
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  font-size:clamp(5rem,22vw,20rem); line-height:1; letter-spacing:.02em; white-space:nowrap; color:#FFB800;
+  text-shadow:.04em .04em 0 #FF3366, .08em .08em 0 #2979FF, 0 .1em .4em rgb(0 0 0 / .6);
+  transform:rotate(-4deg);
+}
 .lobby-backdrop-pile { position:absolute; inset:-6%; filter:blur(9px); transform:translateZ(0); }
 .lobby-backdrop-slot { position:absolute; transform:var(--bd-base); }
 .lobby-backdrop-drift { will-change:transform; }
@@ -304,19 +310,21 @@ input::placeholder { color:#64748B; }
 .route-stage[data-transition="fall"] .page-shell > :not(.lobby-backdrop) { opacity:0; }
 .route-stage[data-transition="enter"] .page-shell > :not(.lobby-backdrop) { animation:routeFgIn .3s ease both; }
 .route-stage[data-transition="enter"] .page-shell:has(> .lobby-backdrop) > :not(.lobby-backdrop) { animation-duration:calc(.3s * var(--enter-slowdown, 1)); animation-delay:calc(1.2s * var(--enter-slowdown, 1) + var(--enter-hold, 0s)); }
+/* Slow devices (and paused backgrounds) keep home and setup screens still: nothing moves, spinners aside. */
+.page-shell:has(> .lobby-backdrop[data-motion="paused"]) *:not(.animate-spin) { animation:none !important; }
 @keyframes routeFgOut { to { opacity:0; } }
 @keyframes routeFgIn { from { opacity:0; } }
 @media (prefers-reduced-motion: no-preference) {
-  .route-stage[data-transition="fall"] .lobby-backdrop-slot { animation:backdropFall var(--fall-d) cubic-bezier(.5,0,.9,.4) var(--fall-delay) both; }
-  .route-stage[data-transition="enter"] .lobby-backdrop-slot { animation:backdropEnter calc(var(--in-d) * var(--enter-slowdown, 1)) cubic-bezier(.16,.84,.3,1) calc(var(--in-delay) * var(--enter-slowdown, 1) + var(--enter-hold, 0s)) both; }
-  .route-stage[data-direction="back"][data-transition="fall"] .lobby-backdrop-slot { animation-name:backdropRise; }
-  .route-stage[data-direction="back"][data-transition="enter"] .lobby-backdrop-slot { animation-name:backdropEnterBack; }
-  .route-stage[data-transition="fade-out"] .lobby-backdrop-pile { animation:backdropSharpen .3s ease forwards; }
-  .route-stage[data-transition="fade-out"] .lobby-backdrop-shade { animation:backdropBrighten .3s ease forwards; }
-  .route-stage[data-transition="fall"] .lobby-backdrop-pile { filter:none; }
-  .route-stage[data-transition="fall"] .lobby-backdrop-shade { opacity:0; }
-  .route-stage[data-transition="enter"] .lobby-backdrop-pile { animation:backdropSharpen calc(.35s * var(--enter-slowdown, 1)) ease calc(.85s * var(--enter-slowdown, 1) + var(--enter-hold, 0s)) reverse both; }
-  .route-stage[data-transition="enter"] .lobby-backdrop-shade { animation:backdropBrighten calc(.35s * var(--enter-slowdown, 1)) ease calc(.85s * var(--enter-slowdown, 1) + var(--enter-hold, 0s)) reverse both; }
+  .route-stage[data-transition="fall"] .lobby-backdrop[data-motion="animated"] .lobby-backdrop-slot { animation:backdropFall var(--fall-d) cubic-bezier(.5,0,.9,.4) var(--fall-delay) both; }
+  .route-stage[data-transition="enter"] .lobby-backdrop[data-motion="animated"] .lobby-backdrop-slot { animation:backdropEnter calc(var(--in-d) * var(--enter-slowdown, 1)) cubic-bezier(.16,.84,.3,1) calc(var(--in-delay) * var(--enter-slowdown, 1) + var(--enter-hold, 0s)) both; }
+  .route-stage[data-direction="back"][data-transition="fall"] .lobby-backdrop[data-motion="animated"] .lobby-backdrop-slot { animation-name:backdropRise; }
+  .route-stage[data-direction="back"][data-transition="enter"] .lobby-backdrop[data-motion="animated"] .lobby-backdrop-slot { animation-name:backdropEnterBack; }
+  .route-stage[data-transition="fade-out"] .lobby-backdrop[data-motion="animated"] .lobby-backdrop-pile { animation:backdropSharpen .3s ease forwards; }
+  .route-stage[data-transition="fade-out"] .lobby-backdrop[data-motion="animated"] .lobby-backdrop-shade { animation:backdropBrighten .3s ease forwards; }
+  .route-stage[data-transition="fall"] .lobby-backdrop[data-motion="animated"] .lobby-backdrop-pile { filter:none; }
+  .route-stage[data-transition="fall"] .lobby-backdrop[data-motion="animated"] .lobby-backdrop-shade { opacity:0; }
+  .route-stage[data-transition="enter"] .lobby-backdrop[data-motion="animated"] .lobby-backdrop-pile { animation:backdropSharpen calc(.35s * var(--enter-slowdown, 1)) ease calc(.85s * var(--enter-slowdown, 1) + var(--enter-hold, 0s)) reverse both; }
+  .route-stage[data-transition="enter"] .lobby-backdrop[data-motion="animated"] .lobby-backdrop-shade { animation:backdropBrighten calc(.35s * var(--enter-slowdown, 1)) ease calc(.85s * var(--enter-slowdown, 1) + var(--enter-hold, 0s)) reverse both; }
 }
 @keyframes backdropSharpen { from { filter:blur(9px); } to { filter:blur(0); } }
 @keyframes backdropBrighten { from { opacity:1; } to { opacity:0; } }

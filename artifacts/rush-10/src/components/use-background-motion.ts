@@ -4,7 +4,8 @@ import { createBackgroundFrameMonitor } from '@/lib/background-frame-rate';
 const STORAGE_KEY = 'rush10-static-background';
 let slowDevice = false;
 
-function rememberedSlowDevice() {
+/** True once this device has shown it cannot keep the background moving smoothly. */
+export function rememberedSlowDevice() {
   try { slowDevice ||= sessionStorage.getItem(STORAGE_KEY) === '1'; } catch { /* Storage may be blocked. */ }
   return slowDevice;
 }

@@ -93,6 +93,8 @@ function LobbyCardBackdropInner() {
 
   return (
     <div className="lobby-backdrop" data-motion={animate ? 'animated' : 'paused'} aria-hidden="true" inert>
+      {/* Sits under the pile: hidden at rest, revealed whenever the cards fall away. */}
+      <div className="lobby-backdrop-hero card-lettering">RUSH 10</div>
       <div className="lobby-backdrop-pile">
         {pile.map((p, i) => (
           <div key={i} className="lobby-backdrop-slot" style={{

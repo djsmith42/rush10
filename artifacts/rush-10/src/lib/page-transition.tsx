@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { flushSync } from 'react-dom';
 import { Router, useLocation, useRouter } from 'wouter';
 import { useBrowserLocation } from 'wouter/use-browser-location';
+import { rememberedSlowDevice } from '@/components/use-background-motion';
 
 /** idle → fade-out (foreground) → fall (backdrop cards) → swap → enter (cards fall in, settle behind blur, then foreground). */
 export type TransitionPhase = 'idle' | 'fade-out' | 'fall' | 'enter';
@@ -13,7 +14,7 @@ const FADE_OUT_MS = 300;
 const FALL_MS = 900;
 const ENTER_MS = 1500;
 /** A first load holds on the bare background this long, then plays the entrance this many times slower. */
-const FIRST_LOAD = { holdMs: 500, slowdown: 2 };
+const FIRST_LOAD = { holdMs: 1000, slowdown: 2 };
 type Entrance = typeof FIRST_LOAD;
 const NORMAL: Entrance = { holdMs: 0, slowdown: 1 };
 
@@ -52,6 +53,8 @@ export function PageTransitionProvider({ children }: { children: ReactNode }) {
 
   const enter = useCallback((next: Entrance = NORMAL) => {
     clearTimers();
+    // Slow devices skip every transition: the cards stay where they rest.
+    if (rememberedSlowDevice()) { setPhase('idle'); return; }
     setEntrance(next);
     setPhase('enter');
     later(next.holdMs + ENTER_MS * next.slowdown, () => setPhase('idle'));
@@ -60,6 +63,7 @@ export function PageTransitionProvider({ children }: { children: ReactNode }) {
   const leave = useCallback((swap: () => void, options?: { back?: boolean }) => {
     if (phaseRef.current === 'fade-out' || phaseRef.current === 'fall') return;
     clearTimers();
+    if (rememberedSlowDevice()) { setPhase('idle'); swap(); return; }
     setDirection(options?.back ? 'back' : 'forward');
     setPhase('fade-out');
     later(FADE_OUT_MS, () => {
