@@ -12,6 +12,11 @@ import type { Rush10PlayerActionAvatar } from './rush10PlayerActionAvatar';
 export interface Rush10PlayerAction {
   playerToken: string;
   action: Rush10PlayerActionAction;
+  /**
+     * @minLength 1
+     * @maxLength 20
+     */
+  playerName?: string;
   avatar?: Rush10PlayerActionAvatar;
   cardIds?: string[];
   melds?: Rush10MeldInput[];

@@ -110,6 +110,31 @@ paths:
           description: Room is full or the request is invalid
         "404":
           description: Room not found
+  /rush10/rooms/{code}/joinable:
+    get:
+      operationId: checkRush10RoomJoinable
+      tags: [rush10]
+      summary: Check that a room exists and can still be joined
+      description: >-
+        Lets the home page reject a bad code before asking for a name, and
+        lets the name screen say who is already in the game.
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The room is waiting for players and has a free seat
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Rush10RoomJoinable"
+        "400":
+          description: The game has started or the room is full
+        "404":
+          description: Room not found
   /rush10/rooms/{code}:
     get:
       operationId: getRush10Room
@@ -253,6 +278,16 @@ components:
           type: string
           minLength: 1
           maxLength: 20
+    Rush10RoomJoinable:
+      type: object
+      required: [roomCode, playerNames]
+      properties:
+        roomCode:
+          type: string
+        playerNames:
+          type: array
+          items:
+            type: string
     Rush10RoomSession:
       type: object
       required: [roomCode, playerToken, playerId, room]
@@ -273,7 +308,11 @@ components:
           type: string
         action:
           type: string
-          enum: [draw-deck, draw-discard, lay-phase, hit, discard, set-avatar, leave]
+          enum: [draw-deck, draw-discard, lay-phase, hit, discard, set-avatar, set-name, leave]
+        playerName:
+          type: string
+          minLength: 1
+          maxLength: 20
         avatar:
           type: string
           enum: [fox, cat, bear, rabbit, owl, panda, frog, penguin]

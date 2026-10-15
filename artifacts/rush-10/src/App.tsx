@@ -13,6 +13,9 @@ import {
   useGetRush10Room,
   useStartRush10Game,
   useActInRush10Game,
+  checkRush10RoomJoinable,
+  getCheckRush10RoomJoinableQueryKey,
+  useCheckRush10RoomJoinable,
 } from '@workspace/api-client-react';
 import type { Rush10PlayerAction, Rush10RoomSession, Rush10RoomView } from '@workspace/api-client-react';
 import { ArrowLeft, ArrowRight, Check, ChevronDown, Clipboard, Layers, LoaderCircle, RefreshCw, Users, X } from 'lucide-react';
@@ -26,6 +29,8 @@ import { playerAuth, roomQueryKey } from '@/lib/room-query';
 
 const queryClient = new QueryClient();
 const SESSION_KEY = 'rush10-player-session';
+const NAME_KEY = 'rush10-player-name';
+const ROOM_CODE = /^[ABCDEFGHJKMNPRSTUVWXYZ]{4}$/;
 type SavedSession = Pick<Rush10RoomSession, 'roomCode' | 'playerToken' | 'playerId'>;
 
 function readSession(): SavedSession | null {
@@ -46,12 +51,26 @@ function saveSession(session: Rush10RoomSession) {
   localStorage.setItem(SESSION_KEY, JSON.stringify(saved));
 }
 
+function readLastName() {
+  try { return localStorage.getItem(NAME_KEY) ?? ''; } catch { return ''; }
+}
+
+function saveLastName(name: string) {
+  try { localStorage.setItem(NAME_KEY, name); } catch { /* the name is only a convenience */ }
+}
+
+function isNotFound(reason: unknown) {
+  return typeof reason === 'object' && reason !== null && 'status' in reason && reason.status === 404;
+}
+
 
 function AppRouter() {
   return (
     <ErrorBoundary resetKey={window.location.pathname}>
       <Switch>
         <Route path="/" component={HomePage} />
+        <Route path="/new" component={NamePage} />
+        <Route path="/join/:code" component={NamePage} />
         <Route path="/test" component={TestIndexPage} />
         <Route path="/test/play" component={TestPlayPage} />
         <Route path="/test/end" component={TestEndPage} />
@@ -66,57 +85,32 @@ function AppRouter() {
 
 function HomePage() {
   const [, navigate] = useLocation();
-  const [playerName, setPlayerName] = useState('');
-  const playerNameRef = useRef<HTMLInputElement>(null);
   const [roomCode, setRoomCode] = useState('');
-  const [error, setError] = useState('');
   const [joinError, setJoinError] = useState('');
+  const [checking, setChecking] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const rulesQuery = useGetRush10Rules();
-  const createRoom = useCreateRush10Room();
-  const joinRoom = useJoinRush10Room();
   const saved = readSession();
 
-  function enter(session: Rush10RoomSession) {
-    saveSession(session);
-    navigate(`/game/${session.roomCode}`);
-  }
-
-  function create() {
-    if (!playerName.trim() || createRoom.isPending || joinRoom.isPending) return;
-    setError('');
-    setJoinError('');
-    createRoom.mutate({ data: { playerName: playerName.trim() } }, {
-      onSuccess: enter,
-      onError: (reason) => setError(errorMessage(reason, 'Could not create a room. Try again.')),
-    });
-  }
-
-  function join(event: FormEvent) {
+  async function join(event: FormEvent) {
     event.preventDefault();
-    if (createRoom.isPending || joinRoom.isPending) return;
-    setError('');
+    if (checking) return;
     setJoinError('');
-    if (!playerName.trim()) {
-      setJoinError('Enter your name above to join a game.');
-      playerNameRef.current?.focus();
-      return;
-    }
-    if (!/^[ABCDEFGHJKMNPRSTUVWXYZ]{4}$/.test(roomCode.trim().toUpperCase())) {
+    const code = roomCode.trim().toUpperCase();
+    if (!ROOM_CODE.test(code)) {
       setJoinError('Enter a valid four-letter game code.');
       return;
     }
-    joinRoom.mutate({ code: roomCode.trim().toUpperCase(), data: { playerName: playerName.trim() } }, {
-      onSuccess: enter,
-      onError: (reason) => setJoinError(
-        typeof reason === 'object' && reason !== null && 'status' in reason && reason.status === 404
-          ? "There's no game with that code"
-          : errorMessage(reason, 'Could not join that room. Check the code.'),
-      ),
-    });
+    // Check the code here so a typo is caught before asking for a name.
+    setChecking(true);
+    try {
+      await checkRush10RoomJoinable(code);
+      navigate(`/join/${code}`);
+    } catch (reason) {
+      setJoinError(isNotFound(reason) ? "There's no game with that code" : errorMessage(reason, 'Could not join that room. Check the code.'));
+      setChecking(false);
+    }
   }
-
-  const busy = createRoom.isPending || joinRoom.isPending;
   return (
     <main className="page-shell home-card-background" style={{ '--paper': '#111827' } as CSSProperties}>
       <LobbyCardBackdrop />
@@ -133,17 +127,11 @@ function HomePage() {
 
         <section className="home-entry space-y-28 pt-0">
           <div className="min-w-0">
-            <div className="mx-auto max-w-xl">
-              <label className="block">
-                <span className="mb-3 block text-xl font-bold text-white">Enter your Name</span>
-                <input ref={playerNameRef} value={playerName} onChange={(e) => setPlayerName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} maxLength={20} required data-testid="input-player-name" className="h-12 w-full rounded-xl border border-[#334155] bg-[#0F172A] px-4 text-[15px] outline-none transition focus:border-[#FF3366] focus:ring-2 focus:ring-[#FF3366]/15" />
-              </label>
-            </div>
-            <div className="mt-14 grid items-start gap-8 md:grid-cols-[1fr_auto_1fr] md:gap-x-4 lg:gap-x-6">
+            <div className="grid items-start gap-8 md:grid-cols-[1fr_auto_1fr] md:gap-x-4 lg:gap-x-6">
             <div className="mx-auto w-full max-w-sm">
               <h2 className="mb-5 text-2xl font-bold tracking-tight">Create a Game</h2>
-              <button type="button" onClick={create} disabled={busy || !playerName.trim()} data-testid="button-create-room" className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#FF3366] font-bold text-white shadow-[0_6px_18px_rgba(255,51,102,.35)] transition hover:translate-y-[-1px] hover:bg-[#E62E5C] active:translate-y-[2px] active:shadow-none disabled:cursor-not-allowed disabled:opacity-55">
-                {createRoom.isPending ? <LoaderCircle className="animate-spin" size={18} /> : <Layers size={17} />} Create a game
+              <button type="button" onClick={() => navigate('/new')} data-testid="button-create-room" className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#FF3366] font-bold text-white shadow-[0_6px_18px_rgba(255,51,102,.35)] transition hover:translate-y-[-1px] hover:bg-[#E62E5C] active:translate-y-[2px] active:shadow-none disabled:cursor-not-allowed disabled:opacity-55">
+                <Layers size={17} /> Create a game
               </button>
             </div>
             <div className="flex flex-col items-center gap-3 text-2xl text-[#64748B]">
@@ -155,7 +143,7 @@ function HomePage() {
               <h2 className="mb-5 text-2xl font-bold tracking-tight">Join a Game</h2>
               <div className="flex gap-2">
               <input aria-label="Room code" value={roomCode} onChange={(e) => setRoomCode(e.target.value.trim().toUpperCase().slice(0, 4))} required minLength={4} maxLength={4} pattern="[ABCDEFGHJKMNPRSTUVWXYZ]{4}" title="Enter the four-letter room code (no I, L, O, Q or numbers)." autoCapitalize="characters" autoCorrect="off" spellCheck={false} placeholder="ROOM CODE" data-testid="input-room-code" className="h-12 min-w-0 flex-1 rounded-xl border border-[#334155] bg-[#0F172A] px-4 font-mono text-sm font-medium uppercase tracking-[.17em] outline-none placeholder:text-[#94A3B8] focus:border-[#2979FF]" />
-              <button type="submit" disabled={busy} data-testid="button-join-room" className="flex h-12 items-center gap-2 rounded-xl border-2 border-white/10 px-4 font-bold transition hover:bg-[#A3E635] hover:text-[#111827] hover:border-[#A3E635] disabled:cursor-not-allowed disabled:opacity-45">{joinRoom.isPending ? <><LoaderCircle size={16} className="animate-spin" /> Joining…</> : <>Join <ArrowRight size={16} /></>}</button>
+              <button type="submit" disabled={checking} data-testid="button-join-room" className="flex h-12 items-center gap-2 rounded-xl border-2 border-white/10 px-4 font-bold transition hover:bg-[#A3E635] hover:text-[#111827] hover:border-[#A3E635] disabled:cursor-not-allowed disabled:opacity-45">{checking ? <><LoaderCircle size={16} className="animate-spin" /> Joining…</> : <>Join <ArrowRight size={16} /></>}</button>
               </div>
               {joinError && <p role="alert" className="mt-3 text-sm text-[#FF8FAB]">{joinError}</p>}
               {saved && <button type="button" onClick={() => navigate(`/game/${saved.roomCode}`)} data-testid="button-reconnect" className="mt-4 flex w-full items-center justify-between gap-2 rounded-xl bg-[#A3E635]/15 px-4 py-3 text-left text-sm font-semibold text-[#A3E635]">
@@ -163,7 +151,6 @@ function HomePage() {
               </button>}
             </form>
             </div>
-            {error && <p role="alert" className="mt-4 rounded-lg bg-[#FF3366]/15 px-3 py-2 text-sm text-[#FF8FAB]">{error}</p>}
           </div>
 
           <div className="py-4 text-white">
@@ -186,6 +173,74 @@ function HomePage() {
             </div>}
           </div>
         </section>
+      </div>
+    </main>
+  );
+}
+
+function NamePage() {
+  const [, navigate] = useLocation();
+  const [joining, params] = useRoute('/join/:code');
+  const code = joining ? (params?.code ?? '').toUpperCase() : '';
+  const [playerName, setPlayerName] = useState(readLastName);
+  const [error, setError] = useState('');
+  const createRoom = useCreateRush10Room();
+  const joinRoom = useJoinRush10Room();
+  const busy = createRoom.isPending || joinRoom.isPending;
+  const validCode = joining && ROOM_CODE.test(code);
+  const joinable = useCheckRush10RoomJoinable(code, {
+    query: { enabled: validCode, queryKey: getCheckRush10RoomJoinableQueryKey(code), refetchInterval: 3000 },
+  });
+  const others = joinable.data?.playerNames ?? [];
+  const lookupError = joinable.isError
+    ? (isNotFound(joinable.error) ? "There's no game with that code" : errorMessage(joinable.error, 'Could not find that game.'))
+    : '';
+
+  useEffect(() => {
+    if (joining && !validCode) navigate('/', { replace: true });
+  }, [joining, validCode]);
+
+  function enter(session: Rush10RoomSession) {
+    saveSession(session);
+    navigate(`/game/${session.roomCode}`);
+  }
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    const name = playerName.trim();
+    if (!name || busy) return;
+    setError('');
+    saveLastName(name);
+    if (joining) {
+      joinRoom.mutate({ code, data: { playerName: name } }, {
+        onSuccess: enter,
+        onError: (reason) => setError(isNotFound(reason) ? "There's no game with that code" : errorMessage(reason, 'Could not join that room. Try again.')),
+      });
+    } else {
+      createRoom.mutate({ data: { playerName: name } }, {
+        onSuccess: enter,
+        onError: (reason) => setError(errorMessage(reason, 'Could not create a game. Try again.')),
+      });
+    }
+  }
+
+  return (
+    <main className="page-shell home-card-background" style={{ '--paper': '#111827' } as CSSProperties}>
+      <LobbyCardBackdrop />
+      <div className="page-content mx-auto max-w-xl px-5 pb-16 pt-4 md:pt-6">
+        <button onClick={() => navigate('/')} aria-label="Back to Rush 10" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#334155] hover:bg-[#1E293B]"><ArrowLeft size={16} /></button>
+        <form onSubmit={submit} noValidate className="pt-16 md:pt-24">
+          {others.length > 0 && <h1 className="mb-10 text-3xl font-bold tracking-[-.04em] text-white" data-testid="text-joining-players">Joining a game with {new Intl.ListFormat('en', { type: 'conjunction' }).format(others)}</h1>}
+          <label className="block">
+            <span className="block text-2xl font-bold tracking-[-.04em] text-white">Your Name</span>
+            <span className="mb-3 mt-1 block text-sm text-[#94A3B8]">This is what other players will see. You can change this later.</span>
+            <input value={playerName} onChange={(e) => setPlayerName(e.target.value)} autoFocus maxLength={20} required data-testid="input-player-name" className="h-12 w-full rounded-xl border border-[#334155] bg-[#0F172A] px-4 text-[15px] outline-none transition focus:border-[#FF3366] focus:ring-2 focus:ring-[#FF3366]/15" />
+          </label>
+          <button type="submit" disabled={busy || !playerName.trim()} data-testid="button-enter-name" className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#FF3366] font-bold text-white shadow-[0_6px_18px_rgba(255,51,102,.35)] transition hover:translate-y-[-1px] hover:bg-[#E62E5C] active:translate-y-[2px] active:shadow-none disabled:cursor-not-allowed disabled:opacity-55">
+            {busy ? <LoaderCircle className="animate-spin" size={18} /> : joining ? <ArrowRight size={17} /> : <Layers size={17} />} {joining ? 'Join the game' : 'Create the game'}
+          </button>
+          {(error || lookupError) && <p role="alert" className="mt-4 rounded-lg bg-[#FF3366]/15 px-3 py-2 text-sm text-[#FF8FAB]">{error || lookupError}</p>}
+        </form>
       </div>
     </main>
   );
@@ -229,6 +284,9 @@ function RoomPage() {
   const [dismissedMessage, setDismissedMessage] = useState('');
   const [copied, setCopied] = useState(false);
   const [avatarPulse, setAvatarPulse] = useState(0);
+  const [nameDraft, setNameDraft] = useState('');
+  const [editingName, setEditingName] = useState(false);
+  const nameTimer = useRef<number | undefined>(undefined);
   const rulesQuery = useGetRush10Rules();
   const token = session?.roomCode.toUpperCase() === code ? session.playerToken : '';
   const roomKey = roomQueryKey(code, session?.playerId);
@@ -294,6 +352,26 @@ function RoomPage() {
     }
   }
 
+  useEffect(() => {
+    if (!editingName && self) setNameDraft(self.name);
+  }, [editingName, self?.name]);
+  useEffect(() => () => window.clearTimeout(nameTimer.current), [room?.status]);
+
+  function commitName(draft: string) {
+    window.clearTimeout(nameTimer.current);
+    const name = draft.trim();
+    if (!name || name === self?.name || room?.status !== 'waiting') return;
+    saveLastName(name);
+    perform('set-name', { playerName: name });
+  }
+
+  function editName(draft: string) {
+    setNameDraft(draft);
+    // Save shortly after typing pauses so others see the change without waiting for blur.
+    window.clearTimeout(nameTimer.current);
+    nameTimer.current = window.setTimeout(() => commitName(draft), 600);
+  }
+
   function pickAvatar(avatar: AvatarKind) {
     if (avatar === normalizeAvatar(self?.avatar)) {
       setAvatarPulse(pulse => pulse + 1);
@@ -309,7 +387,7 @@ function RoomPage() {
         <div className="rounded-[26px] border-2 border-white/10 bg-[#1E293B] p-7 shadow-[var(--shadow-card)]">
           <p className="font-mono text-xs uppercase tracking-[.18em] text-[#94A3B8]">Room {code}</p>
           <h1 className="mt-2 text-3xl font-bold tracking-[-.06em]">You’ll need your seat token.</h1>
-          <p className="mt-3 text-sm leading-relaxed text-[#94A3B8]">This browser doesn’t have a saved player session for this room. Rejoin from the lobby with your name, or return on the device where you started.</p>
+          <p className="mt-3 text-sm leading-relaxed text-[#94A3B8]">This browser doesn’t have a saved player session for this room. Rejoin from the home page, or return on the device where you started.</p>
           <button onClick={() => navigate('/')} className="mt-6 rounded-xl bg-[#FF3366] px-5 py-3 font-bold text-white">Go to the lobby <ArrowRight className="ml-2 inline" size={16} /></button>
         </div>
       </div>
@@ -356,7 +434,7 @@ function RoomPage() {
   return (
     <main className="page-shell waiting-page" style={{ '--paper': '#111827' } as CSSProperties}>
       <LobbyCardBackdrop />
-      {banner !== 'Waiting for players to join.' && bannerEl}
+      {notice && bannerEl}
       <div className="page-content mx-auto max-w-[1400px] px-4 pb-12 pt-4 md:px-8 md:pt-6">
         <header className="mb-5 flex flex-wrap items-center justify-between gap-3 pb-4">
           <div className="flex items-center gap-3">
@@ -370,6 +448,13 @@ function RoomPage() {
               <h1 className="text-4xl font-bold tracking-[-.07em]">Invite players to join</h1>
               <button onClick={copyCode} aria-label={copied ? 'Room code copied' : 'Copy room code'} className="flex items-center gap-2 rounded-xl bg-[#4F46E5] px-4 py-3 font-mono text-sm font-bold tracking-[.14em] text-white hover:bg-[#6366F1]">Room code: {code}{copied ? <Check size={16} /> : <Clipboard size={16} />}</button>
             </div>
+            {self && <label className="mt-7 block">
+              <span className="mb-3 block text-xs font-bold tracking-[.12em] text-[#94A3B8]">your name</span>
+              <input value={nameDraft} onChange={(e) => editName(e.target.value)} onFocus={() => setEditingName(true)}
+                onBlur={() => { commitName(nameDraft); setEditingName(false); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                maxLength={20} data-testid="input-edit-name" className="h-12 w-full rounded-xl border border-[#334155] bg-[#0F172A] px-4 text-[15px] outline-none transition focus:border-[#FF3366] focus:ring-2 focus:ring-[#FF3366]/15" />
+            </label>}
             {self && <div className="mt-7">
               <div className="mb-3 flex items-baseline justify-between gap-3">
                 <p className="text-xs font-bold tracking-[.12em] text-[#94A3B8]">pick your avatar</p>
@@ -378,7 +463,7 @@ function RoomPage() {
             </div>}
             <div className="mt-8 grid gap-3">
               <h2 className="text-xl font-bold text-white">Players:</h2>
-              {room.players.map((player) => <PlayerTile key={player.id} player={player} self={player.id === self?.id} avatarPulse={player.id === self?.id ? avatarPulse : 0} unboxed />)}
+              {room.players.map((player) => <PlayerTile key={player.id} player={player.id === self?.id && nameDraft.trim() ? { ...player, name: nameDraft.trim() } : player} self={player.id === self?.id} avatarPulse={player.id === self?.id ? avatarPulse : 0} unboxed />)}
               {room.players.length < 6 && <div className="flex min-h-[74px] items-center gap-3 px-3 text-sm font-semibold text-white drop-shadow-[0_2px_4px_rgba(0,0,0,1)]"><div className="flex h-10 w-10 items-center justify-center"><Users size={16} /></div>Waiting for a player...</div>}
             </div>
             <div className="mt-8 flex flex-col items-center gap-4 py-4 text-center">

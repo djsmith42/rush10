@@ -37,6 +37,11 @@ export interface Rush10RoomJoin {
   playerName: string;
 }
 
+export interface Rush10RoomJoinable {
+  roomCode: string;
+  playerNames: string[];
+}
+
 export type Rush10GameEventKind = typeof Rush10GameEventKind[keyof typeof Rush10GameEventKind];
 
 
@@ -201,6 +206,7 @@ export const Rush10PlayerActionAction = {
   hit: 'hit',
   discard: 'discard',
   'set-avatar': 'set-avatar',
+  'set-name': 'set-name',
   leave: 'leave',
 } as const;
 
@@ -239,6 +245,11 @@ export interface Rush10MeldInput {
 export interface Rush10PlayerAction {
   playerToken: string;
   action: Rush10PlayerActionAction;
+  /**
+     * @minLength 1
+     * @maxLength 20
+     */
+  playerName?: string;
   avatar?: Rush10PlayerActionAvatar;
   cardIds?: string[];
   melds?: Rush10MeldInput[];

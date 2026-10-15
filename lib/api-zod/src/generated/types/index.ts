@@ -24,6 +24,7 @@ export * from './rush10PlayerAvatar';
 export * from './rush10PlayerTokenInput';
 export * from './rush10RoomCreate';
 export * from './rush10RoomJoin';
+export * from './rush10RoomJoinable';
 export * from './rush10RoomSession';
 export * from './rush10RoomView';
 export * from './rush10RoomViewEndReason';

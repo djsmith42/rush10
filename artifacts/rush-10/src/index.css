@@ -147,7 +147,6 @@ input::placeholder { color:#64748B; }
   .home-card-background > .page-content > section:first-child { padding-top:0; padding-bottom:0; }
   .home-entry { padding-top:0; }
   .home-entry > :not(:last-child) { margin-bottom:32px; }
-  .home-entry .mt-14 { margin-top:24px; }
   .waiting-page > .page-content { padding-top:8px; padding-bottom:16px; }
   .waiting-page header { margin-bottom:4px; padding-bottom:4px; }
   .waiting-page section { padding-top:8px; padding-bottom:8px; }

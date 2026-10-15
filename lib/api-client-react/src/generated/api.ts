@@ -25,6 +25,7 @@ import type {
   Rush10PlayerTokenInput,
   Rush10RoomCreate,
   Rush10RoomJoin,
+  Rush10RoomJoinable,
   Rush10RoomSession,
   Rush10RoomView,
   Rush10Rules,
@@ -479,6 +480,84 @@ export const useJoinRush10Room = <TError = ErrorType<void>,
       > => {
       return useMutation(getJoinRush10RoomMutationOptions(options));
     }
+
+export const getCheckRush10RoomJoinableUrl = (code: string,) => {
+
+
+
+
+  return `/api/rush10/rooms/${code}/joinable`
+}
+
+/**
+ * Lets the home page reject a bad code before asking for a name, and lets the name screen say who is already in the game.
+ * @summary Check that a room exists and can still be joined
+ */
+export const checkRush10RoomJoinable = async (code: string, options?: Parameters<typeof customFetch>[1]): Promise<Rush10RoomJoinable> => {
+
+  return customFetch<Rush10RoomJoinable>(getCheckRush10RoomJoinableUrl(code),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getCheckRush10RoomJoinableQueryKey = (code: string,) => {
+    return [
+    `/api/rush10/rooms/${code}/joinable`
+    ] as const;
+    }
+
+
+export const getCheckRush10RoomJoinableQueryOptions = <TData = Awaited<ReturnType<typeof checkRush10RoomJoinable>>, TError = ErrorType<void>>(code: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof checkRush10RoomJoinable>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCheckRush10RoomJoinableQueryKey(code);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof checkRush10RoomJoinable>>> = ({ signal }) => checkRush10RoomJoinable(code, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: code !== null && code !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof checkRush10RoomJoinable>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type CheckRush10RoomJoinableQueryResult = NonNullable<Awaited<ReturnType<typeof checkRush10RoomJoinable>>>
+export type CheckRush10RoomJoinableQueryError = ErrorType<void>
+
+
+/**
+ * @summary Check that a room exists and can still be joined
+ */
+
+export function useCheckRush10RoomJoinable<TData = Awaited<ReturnType<typeof checkRush10RoomJoinable>>, TError = ErrorType<void>>(
+ code: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof checkRush10RoomJoinable>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getCheckRush10RoomJoinableQueryOptions(code,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetRush10RoomUrl = (code: string,) => {
 

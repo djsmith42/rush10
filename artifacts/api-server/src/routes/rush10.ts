@@ -152,6 +152,11 @@ function requireRoom(room: GameRoom | undefined) {
   return room;
 }
 
+function assertJoinable(room: GameRoom) {
+  if (room.status !== "waiting") throw new GameError("This game has already started. Rejoin with your saved player session.");
+  if (room.players.length >= 6) throw new GameError("This room already has six players.");
+}
+
 function getPlayer(room: GameRoom, token: unknown) {
   if (typeof token !== "string" || !token) throw new GameError("Your player session is missing.", 403);
   const player = room.players.find((candidate) => candidate.token === token);
@@ -573,8 +578,7 @@ router.post("/rush10/rooms/:code/join", async (req, res) => {
     const input = JoinRush10RoomBody.parse(req.body);
     const name = input.playerName.trim();
     if (!name) throw new GameError("Enter a player name.");
-    if (room.status !== "waiting") throw new GameError("This game has already started. Rejoin with your saved player session.");
-    if (room.players.length >= 6) throw new GameError("This room already has six players.");
+    assertJoinable(room);
     const player: GamePlayer = { id: randomUUID(), token: randomUUID(), name, phase: 1, score: 0, hand: [], isHost: false, hasLaidPhase: false };
     player.avatar = randomAvailableAvatar(room.players);
     room.players.push(player);
@@ -582,6 +586,16 @@ router.post("/rush10/rooms/:code/join", async (req, res) => {
     return { roomCode: room.code, playerToken: player.token, playerId: player.id, room: toView(room, player) };
     });
     res.json(response);
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+router.get("/rush10/rooms/:code/joinable", async (req, res) => {
+  try {
+    const room = requireRoom(await readStoredRoom<GameRoom>(req.params.code.toUpperCase()));
+    assertJoinable(room);
+    res.json({ roomCode: room.code, playerNames: room.players.map(player => player.name) });
   } catch (error) {
     handleError(res, error);
   }
@@ -647,6 +661,13 @@ router.post("/rush10/rooms/:code/action", async (req, res) => {
         throw new GameError("That avatar is already taken. Choose another.");
       }
       player.avatar = avatar;
+      return toView(room, player);
+    }
+    if (input.action === "set-name") {
+      if (room.status !== "waiting") throw new GameError("Names can't be changed once the game has started.");
+      const name = (input.playerName ?? "").trim();
+      if (!name) throw new GameError("Enter a player name.");
+      player.name = name;
       return toView(room, player);
     }
     if (input.action === "leave") {

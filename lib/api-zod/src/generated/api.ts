@@ -226,6 +226,20 @@ export const JoinRush10RoomResponse = zod.object({
 
 
 /**
+ * Lets the home page reject a bad code before asking for a name, and lets the name screen say who is already in the game.
+ * @summary Check that a room exists and can still be joined
+ */
+export const CheckRush10RoomJoinableParams = zod.object({
+  "code": zod.coerce.string()
+})
+
+export const CheckRush10RoomJoinableResponse = zod.object({
+  "roomCode": zod.string(),
+  "playerNames": zod.array(zod.string())
+})
+
+
+/**
  * The player token goes in the Authorization header, never the URL, so polling does not write credentials to proxy access logs.
  * @summary Get the public room state and this player's hand
  */
@@ -385,9 +399,14 @@ export const ActInRush10GameParams = zod.object({
   "code": zod.coerce.string()
 })
 
+export const actInRush10GameBodyPlayerNameMax = 20;
+
+
+
 export const ActInRush10GameBody = zod.object({
   "playerToken": zod.string(),
-  "action": zod.enum(['draw-deck', 'draw-discard', 'lay-phase', 'hit', 'discard', 'set-avatar', 'leave']),
+  "action": zod.enum(['draw-deck', 'draw-discard', 'lay-phase', 'hit', 'discard', 'set-avatar', 'set-name', 'leave']),
+  "playerName": zod.string().min(1).max(actInRush10GameBodyPlayerNameMax).optional(),
   "avatar": zod.enum(['fox', 'cat', 'bear', 'rabbit', 'owl', 'panda', 'frog', 'penguin']).optional(),
   "cardIds": zod.array(zod.string()).optional(),
   "melds": zod.array(zod.object({
