@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomInt as secureRandomInt, randomUUID } from "node:crypto";
 import { Router, type IRouter } from "express";
 import { changeStoredRoom, createStoredRoom, readStoredRoom } from "../lib/room-store";
 import {
@@ -122,7 +122,7 @@ class GameError extends Error {
 }
 
 function makeRoomCode() {
-  return Array.from({ length: 4 }, () => codeAlphabet[Math.floor(Math.random() * codeAlphabet.length)]).join("");
+  return Array.from({ length: 4 }, () => codeAlphabet[secureRandomInt(codeAlphabet.length)]).join("");
 }
 
 function makeDeck(): GameCard[] {
@@ -141,7 +141,7 @@ function makeDeck(): GameCard[] {
     deck.push({ id: randomUUID(), type: "skip", value: null, color: null });
   }
   for (let index = deck.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
+    const swapIndex = secureRandomInt(index + 1);
     [deck[index], deck[swapIndex]] = [deck[swapIndex], deck[index]];
   }
   return deck;
@@ -169,7 +169,7 @@ function shuffleDiscardIntoDraw(room: GameRoom) {
   const top = room.discardPile.pop()!;
   const reshuffle = room.discardPile;
   for (let index = reshuffle.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
+    const swapIndex = secureRandomInt(index + 1);
     [reshuffle[index], reshuffle[swapIndex]] = [reshuffle[swapIndex], reshuffle[index]];
   }
   room.drawPile = reshuffle;
@@ -349,13 +349,14 @@ function advanceTurn(room: GameRoom) {
     }
     room.currentPlayerId = candidate.id;
     room.turnState = "draw";
-    room.message = `${candidate.name}'s turn. Draw a card.`;
+    // No banner: the turn indicator already shows whose turn it is.
+    room.message = "";
     return;
   }
   const fallback = room.players[(currentIndex + 1) % room.players.length];
   room.currentPlayerId = fallback.id;
   room.turnState = "draw";
-  room.message = `${fallback.name}'s turn. Draw a card.`;
+  room.message = "";
 }
 
 /** Shared invariant for every move and recovery of older saved games. */
