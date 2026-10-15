@@ -26,6 +26,7 @@ import { GameTable, type Perform } from '@/components/game/game-table';
 import { LobbyCardBackdrop } from '@/components/lobby-card-backdrop';
 import { errorMessage } from '@/lib/error-message';
 import { playerAuth, roomQueryKey } from '@/lib/room-query';
+import { PageTransitionProvider, usePageTransition } from '@/lib/page-transition';
 
 const queryClient = new QueryClient();
 const SESSION_KEY = 'rush10-player-session';
@@ -84,7 +85,7 @@ function AppRouter() {
 }
 
 function HomePage() {
-  const [, navigate] = useLocation();
+  const { go } = usePageTransition();
   const [roomCode, setRoomCode] = useState('');
   const [joinError, setJoinError] = useState('');
   const [checking, setChecking] = useState(false);
@@ -105,7 +106,7 @@ function HomePage() {
     setChecking(true);
     try {
       await checkRush10RoomJoinable(code);
-      navigate(`/join/${code}`);
+      go(`/join/${code}`);
     } catch (reason) {
       setJoinError(isNotFound(reason) ? "There's no game with that code" : errorMessage(reason, 'Could not join that room. Check the code.'));
       setChecking(false);
@@ -130,7 +131,7 @@ function HomePage() {
             <div className="grid items-start gap-8 md:grid-cols-[1fr_auto_1fr] md:gap-x-4 lg:gap-x-6">
             <div className="mx-auto w-full max-w-sm">
               <h2 className="mb-5 text-2xl font-bold tracking-tight">Create a Game</h2>
-              <button type="button" onClick={() => navigate('/new')} data-testid="button-create-room" className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#FF3366] font-bold text-white shadow-[0_6px_18px_rgba(255,51,102,.35)] transition hover:translate-y-[-1px] hover:bg-[#E62E5C] active:translate-y-[2px] active:shadow-none disabled:cursor-not-allowed disabled:opacity-55">
+              <button type="button" onClick={() => go('/new')} data-testid="button-create-room" className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#FF3366] font-bold text-white shadow-[0_6px_18px_rgba(255,51,102,.35)] transition hover:translate-y-[-1px] hover:bg-[#E62E5C] active:translate-y-[2px] active:shadow-none disabled:cursor-not-allowed disabled:opacity-55">
                 <Layers size={17} /> Create a game
               </button>
             </div>
@@ -146,7 +147,7 @@ function HomePage() {
               <button type="submit" disabled={checking} data-testid="button-join-room" className="flex h-12 items-center gap-2 rounded-xl border-2 border-white/10 px-4 font-bold transition hover:bg-[#A3E635] hover:text-[#111827] hover:border-[#A3E635] disabled:cursor-not-allowed disabled:opacity-45">{checking ? <><LoaderCircle size={16} className="animate-spin" /> Joining…</> : <>Join <ArrowRight size={16} /></>}</button>
               </div>
               {joinError && <p role="alert" className="mt-3 text-sm text-[#FF8FAB]">{joinError}</p>}
-              {saved && <button type="button" onClick={() => navigate(`/game/${saved.roomCode}`)} data-testid="button-reconnect" className="mt-4 flex w-full items-center justify-between gap-2 rounded-xl bg-[#A3E635]/15 px-4 py-3 text-left text-sm font-semibold text-[#A3E635]">
+              {saved && <button type="button" onClick={() => go(`/game/${saved.roomCode}`)} data-testid="button-reconnect" className="mt-4 flex w-full items-center justify-between gap-2 rounded-xl bg-[#A3E635]/15 px-4 py-3 text-left text-sm font-semibold text-[#A3E635]">
                 <span><RefreshCw size={14} className="mr-2 inline" /> Reconnect to room <span className="mono">{saved.roomCode}</span></span><ArrowRight size={16} className="shrink-0" />
               </button>}
             </form>
@@ -180,6 +181,8 @@ function HomePage() {
 
 function NamePage() {
   const [, navigate] = useLocation();
+  const { go } = usePageTransition();
+  const queryClient = useQueryClient();
   const [joining, params] = useRoute('/join/:code');
   const code = joining ? (params?.code ?? '').toUpperCase() : '';
   const [playerName, setPlayerName] = useState(readLastName);
@@ -202,7 +205,9 @@ function NamePage() {
 
   function enter(session: Rush10RoomSession) {
     saveSession(session);
-    navigate(`/game/${session.roomCode}`);
+    // The room page renders straight from this instead of a loading skeleton.
+    queryClient.setQueryData(roomQueryKey(session.roomCode, session.playerId), session.room);
+    go(`/game/${session.roomCode}`);
   }
 
   function submit(event: FormEvent) {
@@ -228,7 +233,7 @@ function NamePage() {
     <main className="page-shell home-card-background" style={{ '--paper': '#111827' } as CSSProperties}>
       <LobbyCardBackdrop />
       <div className="page-content mx-auto max-w-xl px-5 pb-16 pt-4 md:pt-6">
-        <button onClick={() => navigate('/')} aria-label="Back to Rush 10" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#334155] hover:bg-[#1E293B]"><ArrowLeft size={16} /></button>
+        <button onClick={() => go('/')} aria-label="Back to Rush 10" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#334155] hover:bg-[#1E293B]"><ArrowLeft size={16} /></button>
         <form onSubmit={submit} noValidate className="pt-16 md:pt-24">
           {others.length > 0 && <h1 className="mb-10 text-3xl font-bold tracking-[-.04em] text-white" data-testid="text-joining-players">Joining a game with {new Intl.ListFormat('en', { type: 'conjunction' }).format(others)}</h1>}
           <label className="block">
@@ -277,7 +282,7 @@ function HeroFan() {
 function RoomPage() {
   const [, params] = useRoute('/game/:code');
   const code = (params?.code ?? '').toUpperCase();
-  const [, navigate] = useLocation();
+  const { go, leave, phase } = usePageTransition();
   const queryClient = useQueryClient();
   const [session, setSession] = useState<SavedSession | null>(() => readSession());
   const [notice, setNotice] = useState('');
@@ -297,6 +302,12 @@ function RoomPage() {
   const startGame = useStartRush10Game();
   const act = useActInRush10Game();
   const room = roomQuery.data;
+  // Starting the game plays the page exit before the table appears; reconnecting mid-game goes straight there.
+  const sawWaiting = useRef(false);
+  if (room?.status === 'waiting') sawWaiting.current = true;
+  const [tableShown, setTableShown] = useState(false);
+  const leavingLobby = !!room && room.status !== 'waiting' && sawWaiting.current && !tableShown;
+  useEffect(() => { if (leavingLobby) leave(() => setTableShown(true)); }, [leavingLobby, leave]);
   const banner = notice || (room?.message !== dismissedMessage ? room?.message : '');
 
   useEffect(() => { setDismissedMessage(''); }, [room?.message]);
@@ -383,12 +394,12 @@ function RoomPage() {
   if (!token) return (
     <main className="page-shell" style={{ '--paper': '#111827' } as CSSProperties}>
       <div className="page-content mx-auto max-w-xl px-5 py-16">
-        <button onClick={() => navigate('/')} className="mb-8 flex items-center gap-2 text-sm font-semibold"><ArrowLeft size={16} /> Back to Rush 10</button>
+        <button onClick={() => go('/')} className="mb-8 flex items-center gap-2 text-sm font-semibold"><ArrowLeft size={16} /> Back to Rush 10</button>
         <div className="rounded-[26px] border-2 border-white/10 bg-[#1E293B] p-7 shadow-[var(--shadow-card)]">
           <p className="font-mono text-xs uppercase tracking-[.18em] text-[#94A3B8]">Room {code}</p>
           <h1 className="mt-2 text-3xl font-bold tracking-[-.06em]">You’ll need your seat token.</h1>
           <p className="mt-3 text-sm leading-relaxed text-[#94A3B8]">This browser doesn’t have a saved player session for this room. Rejoin from the home page, or return on the device where you started.</p>
-          <button onClick={() => navigate('/')} className="mt-6 rounded-xl bg-[#FF3366] px-5 py-3 font-bold text-white">Go to the lobby <ArrowRight className="ml-2 inline" size={16} /></button>
+          <button onClick={() => go('/')} className="mt-6 rounded-xl bg-[#FF3366] px-5 py-3 font-bold text-white">Go to the lobby <ArrowRight className="ml-2 inline" size={16} /></button>
         </div>
       </div>
     </main>
@@ -417,12 +428,13 @@ function RoomPage() {
     <button onClick={() => { setNotice(''); setDismissedMessage(room.message); }} data-testid="dismiss-game-notification" aria-label="Dismiss notification" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full hover:bg-white/10"><X size={14} /></button>
   </div>;
 
-  if (room.status !== 'waiting') return (
+  if (room.status !== 'waiting' && !leavingLobby) return (
     <main className="page-shell" style={{ '--paper': '#111827' } as CSSProperties}>
       {((room.status !== 'round-over' && room.status !== 'finished') || notice) && bannerEl}
       <div className="page-content">
         <GameTable room={room} code={code} selfId={selfId} rules={rulesQuery.data} rulesLoading={rulesQuery.isLoading} retryRules={() => rulesQuery.refetch()}
-          perform={perform} start={start} isBusy={isBusy} actPending={act.isPending} startPending={startGame.isPending} onExit={() => navigate('/')} />
+          perform={perform} start={start} isBusy={isBusy} actPending={act.isPending} startPending={startGame.isPending} onExit={() => go('/')}
+          dealDelay={phase === 'enter' ? 0.3 : 0} />
       </div>
     </main>
   );
@@ -438,7 +450,7 @@ function RoomPage() {
       <div className="page-content mx-auto max-w-[1400px] px-4 pb-12 pt-4 md:px-8 md:pt-6">
         <header className="mb-5 flex flex-wrap items-center justify-between gap-3 pb-4">
           <div className="flex items-center gap-3">
-            <button onClick={() => navigate('/')} aria-label="Back to lobby" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#334155] hover:bg-[#1E293B]"><ArrowLeft size={16} /></button>
+            <button onClick={() => go('/')} aria-label="Back to lobby" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#334155] hover:bg-[#1E293B]"><ArrowLeft size={16} /></button>
             <a href="/" className="text-[17px] font-bold tracking-[-.06em] text-white no-underline">RUSH<span className="text-[#FF3366]">10</span></a>
           </div>
         </header>
@@ -482,7 +494,9 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-          <AppRouter />
+          <PageTransitionProvider>
+            <AppRouter />
+          </PageTransitionProvider>
         </WouterRouter>
         <Toaster />
       </TooltipProvider>

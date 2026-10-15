@@ -94,7 +94,7 @@ function useFan(width: number, n: number, height: number) {
   return { cw, ch, step, padLeft, spread, maxAngle, sag, edgePad, topRoom };
 }
 
-export function OrderedHand({ cards, storageKey, selected, toggleCard, color, incoming, renderAction, headerExtra, controlsSlot, deal, onDealingChange, onDragCardChange, onDropCards, hiddenIds, locked = false }: {
+export function OrderedHand({ cards, storageKey, selected, toggleCard, color, incoming, renderAction, headerExtra, controlsSlot, deal, dealDelay = 0, onDealingChange, onDragCardChange, onDropCards, hiddenIds, locked = false }: {
   onDragCardChange?: (id: string | null) => void;
   onDropCards?: (id: string, x: number, y: number, rect: DropRect) => boolean;
   /** Cards still in hand but drawn elsewhere (e.g. parked where they were dropped). */
@@ -112,6 +112,8 @@ export function OrderedHand({ cards, storageKey, selected, toggleCard, color, in
   /** Render the sort controls into this element instead of a row above the cards; null while it mounts. */
   controlsSlot?: HTMLElement | null;
   deal?: { id: string; createdAt: number };
+  /** Seconds before the first dealt card leaves the pile. */
+  dealDelay?: number;
   onDealingChange?: (dealing: boolean) => void;
 }) {
   const [order, setOrder] = useState<string[]>(() => {
@@ -192,7 +194,7 @@ export function OrderedHand({ cards, storageKey, selected, toggleCard, color, in
     const handRect = container.getBoundingClientRect();
     const targets = shown.map((id, index) => {
       const t = shown.length > 1 ? index / (shown.length - 1) * 2 - 1 : 0;
-      return { id, x: handRect.left + fan.padLeft + index * fan.step - container.scrollLeft, y: handRect.top + fan.topRoom + t * t * fan.sag, rotation: t * fan.maxAngle, delay: index * .2 };
+      return { id, x: handRect.left + fan.padLeft + index * fan.step - container.scrollLeft, y: handRect.top + fan.topRoom + t * t * fan.sag, rotation: t * fan.maxAngle, delay: dealDelay + index * .2 };
     });
     setDealTargets(targets);
     try { if (deal) sessionStorage.setItem(`${storageKey}:dealt`, deal.id); } catch { /* Animation still works without storage. */ }

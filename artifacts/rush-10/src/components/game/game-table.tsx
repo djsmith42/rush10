@@ -19,10 +19,12 @@ export type Perform = (action: Rush10PlayerAction['action'], extra?: Extra, onDo
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
-export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules, perform, start, isBusy, actPending, startPending, onExit }: {
+export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules, perform, start, isBusy, actPending, startPending, onExit, dealDelay = 0 }: {
   room: Rush10RoomView; code: string; selfId?: string;
   rules?: Rush10Rules; rulesLoading: boolean; retryRules: () => void;
   perform: Perform; start: () => void; isBusy: boolean; actPending: boolean; startPending: boolean; onExit: () => void;
+  /** Seconds to hold the deal, so it starts after the table fades in. */
+  dealDelay?: number;
 }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -278,7 +280,7 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
       {room.hand.length === 0 ? <p className="py-14 text-center text-sm text-[#94A3B8]">{isPlaying ? 'Your hand is empty.' : 'Your hand will appear here when the round begins.'}</p> : (
         <OrderedHand key={`${code}-${selfId}-${room.roundNumber}`} storageKey={`rush10-hand-${code}-${selfId}`}
           deal={isPlaying ? [...(room.events ?? [])].reverse().find(event => event.kind === 'deal') : undefined}
-          onDealingChange={setDealingHand}
+          onDealingChange={setDealingHand} dealDelay={dealDelay}
           onDragCardChange={setDraggedId} onDropCards={dropCards} hiddenIds={parkedShown ? [parked!.card.id] : undefined}
           cards={room.hand} selected={selected} toggleCard={toggleCard} color={cardColor} incoming={incoming} controlsSlot={sortSlot}
           locked={!isPlaying} renderAction={isPlaying && isMyTurn && room.turnState === 'discard' ? (card: Rush10Card) => <span className="flex items-center gap-1.5">{card.type === 'skip' && room.players.length > 2 && <label className="table-select"><span>Skip</span><select value={targetPlayerId} onChange={e => setTargetPlayerId(e.target.value)} onPointerDown={e => e.stopPropagation()} data-testid="select-skip-target"><option value="">Choose target</option>{room.players.filter(p => p.id !== selfId).map(p => <option value={p.id} key={p.id}>{p.name}</option>)}</select></label>}<button type="button" onClick={() => discard(card)} disabled={isBusy || needsSkipTarget(card)} data-testid="button-discard" aria-label={`Discard ${cardLabel(card)}`} className="discard-pill">{actPending ? <LoaderCircle size={13} className="animate-spin" /> : <ArrowDown size={13} />} Discard</button></span> : undefined} />
