@@ -8,6 +8,8 @@
     "dev:api": "PORT=3010 DATABASE_PATH=\"$PWD/.data/rush10.db\" pnpm --filter @workspace/api-server dev",
     "dev:web": "API_PORT=3010 PORT=5173 BASE_PATH=/ pnpm --filter @workspace/rush-10 dev",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
+    "clean": "rm -rf artifacts/*/dist lib/*/dist && find . -name node_modules -prune -o -name '*.tsbuildinfo' -type f -exec rm -f {} +",
+    "build:clean": "pnpm run clean && pnpm run build",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
   },
