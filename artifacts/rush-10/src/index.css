@@ -1,16 +1,13 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @plugin "@tailwindcss/typography";
 @custom-variant dark (&:is(.dark *));
 
-@font-face {
-  font-family: 'Bangers';
-  src: url('./assets/fonts/Bangers-Regular.ttf') format('truetype');
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-}
+/* Self-hosted latin subsets, preloaded in index.html so text renders in the right font first time. */
+@font-face { font-family:'Space Grotesk'; src:url('/fonts/space-grotesk-latin.woff2') format('woff2'); font-style:normal; font-weight:400 700; font-display:swap; }
+@font-face { font-family:'DM Mono'; src:url('/fonts/dm-mono-400-latin.woff2') format('woff2'); font-style:normal; font-weight:400; font-display:swap; }
+@font-face { font-family:'DM Mono'; src:url('/fonts/dm-mono-500-latin.woff2') format('woff2'); font-style:normal; font-weight:500; font-display:swap; }
+@font-face { font-family:'Bangers'; src:url('/fonts/bangers-latin.woff2') format('woff2'); font-style:normal; font-weight:400; font-display:swap; }
 .card-lettering { font-family:'Bangers', sans-serif; font-weight:400; }
 
 :root {
