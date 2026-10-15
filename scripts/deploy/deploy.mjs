@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Install, typecheck, build, and publish Rush 10 with every independent step
+// Install, typecheck, test, build, and publish Rush 10 with every independent step
 // running in parallel, shown as a live task board. No dependencies beyond Node.
 //
 // Every step is keyed on a content hash of its inputs: a step whose inputs (and
@@ -70,13 +70,15 @@ const sh = (cmd, args) => new Promise((resolve) => execFile(cmd, args, (err, std
 // is skipped when their hash matches its last success (and `outputs`, if any,
 // still match what it produced). `stamp` overrides the key for deploy steps,
 // which compare the build output against what was last shipped.
-const checks = ["typecheck libs", "typecheck api", "typecheck web", "typecheck scripts"];
+const checks = ["typecheck libs", "typecheck api", "typecheck web", "typecheck scripts", "test web"];
 const tasks = [
   { name: "install", inputs: [...packageJsons, "pnpm-lock.yaml", "pnpm-workspace.yaml"], cmd: () => ["pnpm", "install", "--frozen-lockfile", "--prefer-offline"] },
   { name: "typecheck libs", after: ["install"], inputs: ["lib", ...shared], cmd: () => [bin(root, "tsc"), "--build", "--pretty"] },
   { name: "typecheck api", after: ["typecheck libs"], cwd: api, inputs: [api, "lib", ...shared], cmd: () => [bin(api, "tsc"), "-p", "tsconfig.json", "--noEmit", "--pretty"] },
   { name: "typecheck web", after: ["typecheck libs"], cwd: web, inputs: [web, "lib", ...shared], cmd: () => [bin(web, "tsc"), "-p", "tsconfig.json", "--noEmit", "--pretty"] },
   { name: "typecheck scripts", after: ["install"], cwd: path.join(root, "scripts"), inputs: ["scripts", "lib", ...shared], cmd: () => [bin(root, "tsc"), "-p", "tsconfig.json", "--noEmit", "--pretty"] },
+  // node --test runs each test file in its own process, spread across every core.
+  { name: "test web", after: ["install"], cwd: web, inputs: [web, "lib", ...shared], cmd: () => [bin(web, "tsx"), "--test", ...readdirSync(path.join(web, "src/lib")).filter((f) => f.endsWith(".test.ts")).map((f) => `src/lib/${f}`)] },
   { name: "build api", after: ["install"], cwd: api, inputs: [api, "lib", ...shared], outputs: [apiOut], cmd: () => [process.execPath, "build.mjs"] },
   {
     name: "build web",

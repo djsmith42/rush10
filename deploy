@@ -8,5 +8,5 @@ export PATH=/opt/node24/bin:$PATH COREPACK_ENABLE_DOWNLOAD_PROMPT=0 CI=true
 # The restart runs under the live board, so get any sudo password prompt out of the way now.
 sudo -n true 2>/dev/null || sudo -v
 
-# Install, typecheck, build, publish, and restart in parallel; nothing ships unless every check passes.
+# Install, typecheck, test, build, publish, and restart in parallel; nothing ships unless every check passes.
 exec node scripts/deploy/deploy.mjs "$@"
