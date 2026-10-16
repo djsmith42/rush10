@@ -9,7 +9,7 @@
 //   ./dbdump --json              every table, every column, unformatted (state parsed)
 //   ./dbdump --db=/path/to.db    another database (default: $DATABASE_PATH or production)
 import { createRequire } from "node:module";
-import { existsSync, readFileSync } from "node:fs";
+import { accessSync, constants, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -26,7 +26,14 @@ if (flag("help") || args.includes("-h")) {
 const dbPath = value("db") || process.env.DATABASE_PATH || "/var/lib/rush10/rush10.db";
 const statusFilter = value("status");
 const codes = args.filter((a) => !a.startsWith("-")).map((c) => c.toUpperCase());
-if (!existsSync(dbPath)) fail(`No database at ${dbPath}`);
+try {
+  accessSync(dbPath, constants.R_OK);
+} catch {
+  // The database belongs to the rush10 account; dave reads it through the rush10 group.
+  fail(existsSync(path.dirname(dbPath)) && !existsSync(dbPath)
+    ? `Can't read ${dbPath}. If you were just added to the rush10 group, log in again (or run: newgrp rush10).`
+    : `No database at ${dbPath}`);
+}
 const db = new Database(dbPath, { readonly: true, fileMustExist: true });
 
 // ── Styling ─────────────────────────────────────────────────────────────────
