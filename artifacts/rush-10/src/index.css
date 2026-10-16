@@ -223,6 +223,13 @@ input::placeholder { color:#64748B; }
   0% { box-shadow:0 0 0 0 rgb(163 230 53 / .5),0 0 12px rgb(163 230 53 / .25); }
   100% { box-shadow:0 0 0 14px rgb(163 230 53 / 0),0 0 24px rgb(163 230 53 / 0); }
 }
+@media (prefers-reduced-motion:no-preference) {
+  .meld-status.is-building { animation:meldStatusPulse 1.4s ease-out infinite; }
+}
+@keyframes meldStatusPulse {
+  0% { box-shadow:0 0 0 0 rgb(var(--pulse) / .55); }
+  100% { box-shadow:0 0 0 10px rgb(var(--pulse) / 0); }
+}
 .meld-spread.can-hit:hover:after { box-shadow:0 0 0 3px #A3E635; }
 .meld-spread:focus-visible { outline:3px solid #FFB800; outline-offset:2px; }
 

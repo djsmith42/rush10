@@ -52,7 +52,12 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
   const isPlaying = room.status === 'playing';
   const isRoundOver = room.status === 'round-over';
   const isFinished = room.status === 'finished';
-  const levelTitle = (n?: number) => rules?.phases.find(p => p.number === n)?.title;
+  const levelTitle = (n?: number) => {
+    const title = rules?.phases.find(p => p.number === n)?.title;
+    // Say so when no part of the level needs one color; once for the whole level, not per part.
+    const anyColor = n !== undefined && !(PHASE_PARTS[n] ?? []).some(part => part.type === 'color');
+    return title && anyColor ? `${title}, Any Color` : title;
+  };
 
   useEffect(() => {
     setSelected([]);
@@ -78,7 +83,9 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
   useEffect(() => { room.melds.forEach(m => knownMelds.current!.add(m.id)); });
 
   function act(action: Rush10PlayerAction['action'], extra: Extra = {}, onDone?: (updated: Rush10RoomView) => void, onError?: () => void) {
-    perform(action, extra, (updated) => { setSelected([]); setTargetPlayerId(''); onDone?.(updated); }, onError);
+    // A draw or a discard keeps the selection, so a group in progress survives the turn.
+    const keepSelection = action === 'draw-deck' || action === 'draw-discard' || action === 'discard';
+    perform(action, extra, (updated) => { if (!keepSelection) setSelected([]); setTargetPlayerId(''); onDone?.(updated); }, onError);
   }
 
   function toggleCard(id: string) {
@@ -108,7 +115,10 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
   // Selection order is preserved in hand order so recognition is deterministic.
   const selectedCards = useMemo(() => room.hand.filter(card => selected.includes(card.id)), [room.hand, selected]);
   const recognition = useMemo(() => recognizeSelection(selectedCards, PHASE_PARTS[self?.phase ?? 0] ?? []), [selectedCards, self?.phase]);
-  const showRecognition = isPlaying && !!self && !self.hasLaidPhase && recognition.status !== 'empty';
+  const showRecognition = isPlaying && !!self && !self.hasLaidPhase;
+  // The border pulses only once the player starts to select cards.
+  const buildingMeld = selectedCards.length > 0;
+  const recognitionMessage = recognition.message || 'Click cards to make a group to lay';
   const canLay = isPlaying && isMyTurn && room.turnState === 'discard' && !self?.hasLaidPhase && recognition.status === 'ready' && !isBusy && !dealingHand;
   // A ready selection always shows the button; until it can be used, say why instead of hiding it.
   const showLay = canLay || (showRecognition && recognition.status === 'ready');
@@ -130,10 +140,10 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
 
   const needsSkipTarget = (card: Rush10Card) => card.type === 'skip' && room.players.length > 2 && !targetPlayerId;
   function discard(card: Rush10Card, onError?: () => void) {
-    act('discard', { cardIds: [card.id], ...(targetPlayerId ? { targetPlayerId } : {}) }, undefined, onError);
+    act('discard', { cardIds: [card.id], ...(targetPlayerId ? { targetPlayerId } : {}) }, () => setSelected(prev => prev.filter(id => id !== card.id)), onError);
   }
-  // Discarding by drag moves exactly one card; dragging part of a multi-card selection is a hit, not a discard.
-  const draggedDiscard = draggedId && hitIds.length === 1 ? room.hand.find(card => card.id === draggedId) : undefined;
+  // Discarding by drag moves exactly the dragged card, selected or not, whatever else is selected.
+  const draggedDiscard = draggedId ? room.hand.find(card => card.id === draggedId) : undefined;
   const canDropDiscard = isPlaying && isMyTurn && room.turnState === 'discard' && !!draggedDiscard && !needsSkipTarget(draggedDiscard) && !isBusy && !dealingHand;
 
   function dropCards(id: string, x: number, y: number, rect: DropRect) {
@@ -258,13 +268,14 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
       </div>
       {/* The hand's sort buttons share this row, so the hand needs no header row of its own. */}
       <div ref={setSortSlot} className="self-center" data-testid="hand-controls" />
-      {/* Centered on the row (not between its neighbours); on narrow screens it wraps to its own line. */}
-      <div className="order-last flex w-full justify-center empty:hidden md:pointer-events-none md:absolute md:inset-x-0 md:top-1/2 md:order-none md:-translate-y-1/2">
+      {/* Centered on the row (not between its neighbours), raised above the level line so a long level title can pass under it.
+          On narrow screens it wraps to its own line. */}
+      <div className="order-last flex w-full justify-center empty:hidden md:pointer-events-none md:absolute md:inset-x-0 md:top-1/2 md:order-none md:-translate-y-[calc(50%+1.25rem)]">
         <AnimatePresence>
           {(showRecognition || showLay) && <motion.div key="recognition" className="pointer-events-auto flex flex-wrap items-center justify-center gap-3"
             initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={{ duration: 0.2, ease: EASE }}>
-            {showRecognition && <motion.p key={recognition.message} initial={reduce ? false : { opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} aria-live="polite" data-testid="text-meld-status" data-status={recognition.status}
-              className={`rounded-full px-3.5 py-1.5 text-center text-[13px] font-bold ${recognition.status === 'ready' ? 'bg-[#A3E635]/20 text-[#D9F99D]' : recognition.status === 'extra' ? 'bg-[#FFB800]/15 text-[#FDE68A]' : 'bg-white/[.07] text-white/85'}`}>{recognition.message}</motion.p>}
+            {showRecognition && <motion.p key={recognitionMessage} initial={reduce ? false : { opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} aria-live="polite" data-testid="text-meld-status" data-status={recognition.status}
+              className={`meld-status rounded-full border-2 px-4 py-2 text-center text-[16px] font-bold ${buildingMeld ? 'is-building' : ''} ${recognition.status === 'ready' ? 'border-[#A3E635]/70 bg-[#A3E635]/20 text-[#D9F99D] [--pulse:163_230_53]' : recognition.status === 'extra' ? 'border-[#FFB800]/70 bg-[#FFB800]/15 text-[#FDE68A] [--pulse:255_184_0]' : buildingMeld ? 'border-white/50 bg-white/[.07] text-white/85 [--pulse:255_255_255]' : 'border-white/15 bg-white/[.07] text-white/70'}`}>{recognitionMessage}</motion.p>}
             {showLay && <div className="relative flex items-center gap-2 pt-1">
               {canLay && <ArrowDown aria-hidden="true" className="pile-turn-arrow" strokeWidth={4} />}
               <button onClick={layPhase} disabled={!canLay} data-testid="button-lay-phase" className="table-chip is-primary">{actPending ? <LoaderCircle size={13} className="animate-spin" /> : null} Lay Down Cards</button>

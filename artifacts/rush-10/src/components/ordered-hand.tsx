@@ -420,7 +420,7 @@ export function OrderedHand({ cards, storageKey, selected, toggleCard, color, in
             style={{ width: cw, height: ch, borderRadius: radius, background: color(card, index), transformOrigin: '50% 100%' }}>
             <ScaledFace card={card} innerWidth={cw - 4} />
           </motion.button>
-          {isFocus && !drag?.active && !inFlight && !hiddenIds?.includes(id) && renderAction && <motion.div key={`action-${id}`}
+          {(isFocus || (isHover && isSelected)) && !drag?.active && !inFlight && !hiddenIds?.includes(id) && renderAction && <motion.div key={`action-${id}`}
             style={{ x: '-50%', top: arcY - 30 - 50 }} initial={reduceMotion ? false : { opacity: 0, y: 8, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.2, ease: EASE }}
             className="absolute left-1/2 z-[70] whitespace-nowrap" data-keep-selection>
             {renderAction(card)}
