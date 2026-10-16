@@ -1,0 +1,5 @@
+#!/bin/sh
+# Print the Rush 10 database readably (local only, read-only). ./dbdump --help for options.
+set -eu
+cd "$(dirname "$0")"
+exec /opt/node24/bin/node scripts/db/dbdump.mjs "$@"

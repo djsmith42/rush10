@@ -11,8 +11,13 @@ Environment=HOST=127.0.0.1
 Environment=PORT=3010
 Environment=DATABASE_PATH=/var/lib/rush10/rush10.db
 ExecStart=/opt/node24/bin/node --enable-source-maps dist/index.mjs
-Restart=on-failure
+Restart=always
 RestartSec=5
+# Keep a flood from starving the rest of the box.
+MemoryMax=512M
+CPUQuota=150%
+TasksMax=64
+LimitNOFILE=4096
 StandardOutput=journal
 StandardError=journal
 

@@ -1,3 +1,4 @@
+import { statSync } from "node:fs";
 import { sqlite } from "@workspace/db";
 
 type RoomState = { code: string; skippedPlayerIds: Set<string> };
@@ -42,4 +43,30 @@ export async function changeStoredRoom<T extends RoomState, R>(
     if (room) updateRoom.run(encode(room), code);
     return response;
   }).immediate();
+}
+
+const countWaiting = sqlite.prepare<[], { count: number }>(
+  "SELECT count(*) AS count FROM rush10_rooms WHERE json_extract(state, '$.status') = 'waiting'",
+);
+// Games in progress survive a week of idling; lobbies and finished games, a day.
+const deleteStale = sqlite.prepare(`
+  DELETE FROM rush10_rooms WHERE updated_at < CASE
+    WHEN json_extract(state, '$.status') IN ('playing', 'round-over')
+    THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-7 days')
+    ELSE strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 day')
+  END
+`);
+
+export function countWaitingRooms() {
+  return countWaiting.get()!.count;
+}
+
+export function deleteStaleRooms() {
+  return deleteStale.run().changes;
+}
+
+/** Bytes on disk for the database, including its write-ahead log. */
+export function storedBytes() {
+  const size = (file: string) => { try { return statSync(file).size; } catch { return 0; } };
+  return size(sqlite.name) + size(`${sqlite.name}-wal`);
 }

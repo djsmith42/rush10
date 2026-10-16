@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { startStaleRoomCleanup } from "./lib/protection";
 
 const rawPort = process.env["PORT"];
 
@@ -25,4 +26,5 @@ app.listen(port, host, (err) => {
   }
 
   logger.info({ host, port }, "Server listening");
+  startStaleRoomCleanup();
 });

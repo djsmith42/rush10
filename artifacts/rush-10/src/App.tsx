@@ -72,10 +72,15 @@ function AppRouter() {
         <Route path="/" component={HomePage} />
         <Route path="/new" component={NamePage} />
         <Route path="/join/:code" component={NamePage} />
-        <Route path="/test" component={TestIndexPage} />
-        <Route path="/test/play" component={TestPlayPage} />
-        <Route path="/test/end" component={TestEndPage} />
-        <Route path="/test-game"><Redirect to="/test" replace /></Route>
+        {/* The API refuses test games in production, so the pages are dev-only too. */}
+        {import.meta.env.DEV && (
+          <>
+            <Route path="/test" component={TestIndexPage} />
+            <Route path="/test/play" component={TestPlayPage} />
+            <Route path="/test/end" component={TestEndPage} />
+            <Route path="/test-game"><Redirect to="/test" replace /></Route>
+          </>
+        )}
         <Route path="/game/:code" component={RoomPage} />
         <Route path="/room/:code">{params => <Redirect to={`/game/${params.code}`} replace />}</Route>
         <Route component={NotFound} />

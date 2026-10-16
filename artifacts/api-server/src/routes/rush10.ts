@@ -1,6 +1,8 @@
 import { randomInt as secureRandomInt, randomUUID } from "node:crypto";
-import { Router, type IRouter } from "express";
-import { changeStoredRoom, createStoredRoom, readStoredRoom } from "../lib/room-store";
+import { Router, type IRouter, type RequestHandler } from "express";
+import { changeStoredRoom, countWaitingRooms, createStoredRoom, readStoredRoom, storedBytes } from "../lib/room-store";
+import { createLimit, joinLimit, MAX_DATABASE_BYTES, MAX_WAITING_ROOMS } from "../lib/protection";
+import { logger } from "../lib/logger";
 import {
   ActInRush10GameBody,
   CreateRush10RoomBody,
@@ -510,6 +512,17 @@ function seedTestRoom(code: string, scenario: "play" | "level-10" | "player-left
 
 const router: IRouter = Router();
 
+// Abuse limits run ahead of the handlers they guard.
+// Test scenarios hand out every seat's token; they exist for local development only.
+const devOnly: RequestHandler = (_req, res, next) => {
+  if (process.env.NODE_ENV === "production") res.status(404).json({ error: "Not found." });
+  else next();
+};
+router.post("/rush10/rooms", createLimit);
+router.post("/rush10/test-rooms", devOnly, createLimit);
+router.post("/rush10/rooms/:code/join", joinLimit);
+router.get("/rush10/rooms/:code/joinable", joinLimit);
+
 router.get("/rush10/rules", (_req, res) => {
   res.json({
     phases: PHASES.map(({ number, title, description }) => ({ number, title, description })),
@@ -523,6 +536,15 @@ router.post("/rush10/rooms", async (req, res) => {
     const input = CreateRush10RoomBody.parse(req.body);
     const name = input.playerName.trim();
     if (!name) throw new GameError("Enter a player name.");
+    const bytes = storedBytes();
+    if (bytes > MAX_DATABASE_BYTES) {
+      logger.warn({ bytes }, "Database is over its size cap; refusing new games");
+      throw new GameError("The server is full right now. Please try again later.", 503);
+    }
+    if (countWaitingRooms() >= MAX_WAITING_ROOMS) {
+      logger.warn({ max: MAX_WAITING_ROOMS }, "Too many games waiting for players; refusing new games");
+      throw new GameError("The server is full right now. Please try again later.", 503);
+    }
     const code = makeRoomCode();
     const host: GamePlayer = { id: randomUUID(), token: randomUUID(), name, phase: 1, score: 0, hand: [], isHost: true, hasLaidPhase: false };
     host.avatar = randomAvailableAvatar([]);
