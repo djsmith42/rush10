@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { Rush10BotLevel } from './rush10BotLevel';
 import type { Rush10MeldInput } from './rush10MeldInput';
 import type { Rush10PlayerActionAction } from './rush10PlayerActionAction';
 import type { Rush10PlayerActionAvatar } from './rush10PlayerActionAvatar';
@@ -22,6 +23,7 @@ export interface Rush10PlayerAction {
   melds?: Rush10MeldInput[];
   meldId?: string;
   targetPlayerId?: string;
+  botLevel?: Rush10BotLevel;
   /** @nullable */
   declaredValue?: number | null;
   /** @nullable */

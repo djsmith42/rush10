@@ -3,6 +3,7 @@ import { Router, type IRouter, type RequestHandler } from "express";
 import { changeStoredRoom, countWaitingRooms, createStoredRoom, readStoredRoom, storedBytes } from "../lib/room-store";
 import { createLimit, joinLimit, MAX_DATABASE_BYTES, MAX_WAITING_ROOMS } from "../lib/protection";
 import { logger } from "../lib/logger";
+import { chooseBotMove, type BotLevel } from "../lib/bot-strategy";
 import {
   ActInRush10GameBody,
   CreateRush10RoomBody,
@@ -31,6 +32,9 @@ type GamePlayer = {
   score: number;
   hand: GameCard[];
   isHost: boolean;
+  /** Bot: its turns are played by the server; its token is never handed out. */
+  isBot?: boolean;
+  botLevel?: BotLevel;
   hasLaidPhase: boolean;
 };
 const AVATARS = ["fox", "cat", "bear", "rabbit", "owl", "panda", "frog", "penguin"] as const;
@@ -69,6 +73,8 @@ type GameRoom = {
   endReason?: EndReason | null;
   endedByPlayerId?: string | null;
   dealerIndex: number;
+  /** When the bot whose turn it is may make its next move (ms since epoch). */
+  botDueAt?: number | null;
 };
 type PhasePart = { type: MeldType; size: number };
 type GameEvent = {
@@ -217,6 +223,8 @@ function toView(room: GameRoom, player: GamePlayer) {
       score: candidate.score,
       handCount: candidate.hand.length,
       isHost: candidate.isHost,
+      isBot: !!candidate.isBot,
+      ...(candidate.isBot ? { botLevel: candidate.botLevel ?? "medium" } : {}),
       hasLaidPhase: candidate.hasLaidPhase,
     })),
     hostPlayerId: room.hostPlayerId,
@@ -510,6 +518,185 @@ function seedTestRoom(code: string, scenario: "play" | "level-10" | "player-left
   return room;
 }
 
+type ActionInput = ReturnType<typeof ActInRush10GameBody.parse>;
+
+/** One turn move (draw, lay, hit or discard) by a human or a bot. */
+function playTurn(room: GameRoom, player: GamePlayer, input: ActionInput) {
+  assertCurrentTurn(room, player);
+  const cardIds = input.cardIds ?? [];
+  if (input.action === "draw-deck" || input.action === "draw-discard") {
+    if (room.turnState !== "draw") throw new GameError("Draw one card before playing.");
+    if (input.action === "draw-deck") {
+      player.hand.push(drawOne(room));
+    } else {
+      const top = room.discardPile.at(-1);
+      if (top?.type === "skip") {
+        throw new GameError("You can't draw a Skip from the discard pile");
+      }
+      const card = room.discardPile.pop();
+      if (!card) throw new GameError("There is no discard card to pick up.");
+      player.hand.push(card);
+    }
+    room.turnState = "discard";
+    room.message = ""; // Drawing is shown by the card-flight animation, not a banner.
+    // Never include a privately drawn card in the public animation log.
+    recordEvent(room, player.id, input.action);
+  } else if (input.action === "lay-phase") {
+    if (room.turnState !== "discard") throw new GameError("Draw a card before laying your level.");
+    if (player.hasLaidPhase) throw new GameError("You have already laid your level this round.");
+    const newMelds = validatePhaseInput(player, input.melds ?? []);
+    room.melds.push(...newMelds);
+    player.hasLaidPhase = true;
+    room.message = `${player.name} laid Level ${player.phase}.`;
+    recordEvent(room, player.id, "lay-phase");
+  } else if (input.action === "hit") {
+    if (room.turnState !== "discard") throw new GameError("Draw a card before adding cards to a pile.");
+    if (!player.hasLaidPhase) throw new GameError("Lay down your own level before adding cards to a pile.");
+    if (!cardIds.length || !input.meldId) throw new GameError("Choose cards and one laid-down pile.");
+    const meld = room.melds.find((candidate) => candidate.id === input.meldId);
+    if (!meld) throw new GameError("That pile is no longer in the game.");
+    if (new Set(cardIds).size !== cardIds.length) throw new GameError("A card can only be used once.");
+    const selected = cardIds.map(id => {
+      const card = player.hand.find(card => card.id === id);
+      if (!card) throw new GameError("Choose cards from your hand.");
+      return card;
+    });
+    if (selected.some(card => card.type === "skip")) throw new GameError("Skip cards cannot be added to a pile.");
+    let low = meld.low;
+    let high = meld.high;
+    if (meld.type === "group") {
+      if (selected.some(card => card.type === "number" && card.value !== meld.declaredValue)) throw new GameError("All selected cards must match the Group.");
+    } else if (meld.type === "sequence") {
+      if (selected.length === 1) {
+        const value = input.declaredValue;
+        if (!value || (value !== low! - 1 && value !== high! + 1) || (selected[0].type === "number" && selected[0].value !== value) || value < 1 || value > 12) {
+          throw new GameError("A Sequence can only be extended by its next consecutive number (1–12).");
+        }
+        if (value === low! - 1) low = value;
+        else high = value;
+      } else {
+        const numbers = selected.filter(card => card.type === "number").map(card => card.value!);
+        const size = high! - low! + 1 + selected.length;
+        let bounds: { low: number; high: number } | undefined;
+        if (new Set(numbers).size === numbers.length && !numbers.some(n => n >= low! && n <= high!)) {
+          for (let start = Math.max(1, low! - selected.length); start <= low!; start++) {
+            const end = start + size - 1;
+            if (end >= high! && end <= 12 && numbers.every(n => n >= start && n <= end)) {
+              bounds = { low: start, high: end };
+              break;
+            }
+          }
+        }
+        if (!bounds) throw new GameError("All selected cards must extend the Sequence without gaps (1–12).");
+        low = bounds.low;
+        high = bounds.high;
+      }
+    } else if (selected.some(card => card.type === "number" && card.color !== meld.declaredColor)) {
+      throw new GameError("All selected cards must match the color level.");
+    }
+    // Commit only after validating every card, never a partial selection.
+    meld.low = low;
+    meld.high = high;
+    player.hand = player.hand.filter((card) => !cardIds.includes(card.id));
+    meld.cardIds.push(...cardIds);
+    meld.cards.push(...selected);
+    for (const card of selected) recordEvent(room, player.id, "hit", card);
+    room.message = `${player.name} added ${selected.length === 1 ? "a card" : `${selected.length} cards`} to ${room.players.find((candidate) => candidate.id === meld.ownerId)?.name ?? "a player"}'s pile.`;
+  } else if (input.action === "discard") {
+    if (room.turnState !== "discard") throw new GameError("Draw a card before discarding.");
+    if (cardIds.length !== 1) throw new GameError("Discard one card to end your turn.");
+    const selected = player.hand.find((card) => card.id === cardIds[0]);
+    if (!selected) throw new GameError("Choose a card from your hand.");
+    let skippedPlayer: GamePlayer | undefined;
+    if (selected.type === "skip") {
+      const targetId = input.targetPlayerId || (room.players.length === 2 ? room.players.find(candidate => candidate.id !== player.id)?.id : undefined);
+      skippedPlayer = room.players.find(candidate => candidate.id === targetId && candidate.id !== player.id);
+      if (!skippedPlayer) {
+        throw new GameError("Choose another player to skip.");
+      }
+      room.skippedPlayerIds.add(skippedPlayer.id);
+    }
+    player.hand = player.hand.filter((card) => card.id !== selected.id);
+    room.discardPile.push(selected);
+    recordEvent(room, player.id, "discard", selected, skippedPlayer?.id);
+    if (player.hand.length === 0) {
+      finishRound(room, player);
+    } else {
+      advanceTurn(room);
+      if (skippedPlayer && room.currentPlayerId === player.id) {
+        room.message = `${player.name}'s turn again because they skipped ${skippedPlayer.name}.`;
+      }
+    }
+  }
+  completeRoundIfNeeded(room);
+}
+
+const BOT_NAMES = ["Botley", "Chip", "Gizmo", "Pixel", "Sprocket", "Widget", "Bleep", "Cog"];
+/** Pause before each bot move so people can follow it, and after a deal so the cards finish flying. */
+const BOT_MOVE_MS = 1100;
+const BOT_HIT_MS = 700;
+const dealPauseMs = (room: GameRoom) => 1500 + room.players.length * 10 * 200;
+
+function addBot(room: GameRoom, botLevel: BotLevel) {
+  assertJoinable(room);
+  const taken = new Set(room.players.map(player => player.name));
+  const name = BOT_NAMES.find(candidate => !taken.has(candidate)) ?? `Bot ${room.players.length + 1}`;
+  const bot: GamePlayer = { id: randomUUID(), token: randomUUID(), name, phase: 1, score: 0, hand: [], isHost: false, isBot: true, botLevel, hasLaidPhase: false };
+  bot.avatar = randomAvailableAvatar(room.players);
+  room.players.push(bot);
+  room.message = `${name} joined the game.`;
+}
+
+function currentBot(room: GameRoom) {
+  if (room.status !== "playing") return undefined;
+  const player = room.players.find(candidate => candidate.id === room.currentPlayerId);
+  return player?.isBot ? player : undefined;
+}
+
+/** Arm (or clear) the timer for the next bot move after any change to the room. */
+function scheduleBot(room: GameRoom, delayMs = BOT_MOVE_MS) {
+  room.botDueAt = currentBot(room) ? Date.now() + delayMs : null;
+}
+
+function botIsDue(room: GameRoom) {
+  return !!currentBot(room) && (room.botDueAt ?? 0) <= Date.now();
+}
+
+/** Play one move for the bot whose turn it is. Polls drive this, so bots
+ * need no background timers and simply resume after a restart. */
+function runBotStep(room: GameRoom) {
+  const bot = currentBot(room);
+  if (!bot) return;
+  const move = chooseBotMove({
+    level: bot.botLevel ?? "medium",
+    self: bot,
+    opponents: room.players.filter(player => player !== bot),
+    parts: PHASES[bot.phase - 1].parts,
+    turnState: room.turnState,
+    discardTop: room.discardPile.at(-1) ?? null,
+    melds: room.melds,
+    skippedPlayerIds: room.skippedPlayerIds,
+  });
+  try {
+    playTurn(room, bot, ActInRush10GameBody.parse({ playerToken: bot.token, ...move }));
+  } catch (error) {
+    // A strategy bug must not stall the game: fall back to the plainest legal move.
+    logger.error({ err: error, room: room.code, action: move.action }, "Bot move was rejected");
+    const fallback = room.turnState === "draw"
+      ? { action: "draw-deck" as const }
+      : { action: "discard" as const, cardIds: [(bot.hand.find(card => card.type !== "skip") ?? bot.hand[0]).id], targetPlayerId: room.players.find(player => player !== bot)?.id };
+    try {
+      playTurn(room, bot, ActInRush10GameBody.parse({ playerToken: bot.token, ...fallback }));
+    } catch (fallbackError) {
+      // Never fail the viewer's poll over it; try again shortly.
+      logger.error({ err: fallbackError, room: room.code }, "Bot fallback move was rejected");
+      scheduleBot(room, 5000);
+      return;
+    }
+  }
+  scheduleBot(room, move.action === "hit" ? BOT_HIT_MS : BOT_MOVE_MS);
+}
+
 const router: IRouter = Router();
 
 // Abuse limits run ahead of the handlers they guard.
@@ -629,13 +816,14 @@ router.get("/rush10/rooms/:code", async (req, res) => {
     const room = requireRoom(await readStoredRoom<GameRoom>(req.params.code.toUpperCase()));
     const token = requestToken(req);
     const player = getPlayer(room, token);
-    if (room.status === "playing" && room.players.length > 0 &&
-        (room.players.some(player => player.hand.length === 0) || room.players.every(player => player.hasLaidPhase))) {
-      // Re-read under the same lock as moves; concurrent polls must not score twice.
+    if (botIsDue(room) || (room.status === "playing" && room.players.length > 0 &&
+        (room.players.some(player => player.hand.length === 0) || room.players.every(player => player.hasLaidPhase)))) {
+      // Re-read under the same lock as moves; concurrent polls must not score twice or move a bot twice.
       const recovered = await changeStoredRoom(req.params.code.toUpperCase(), (stored: GameRoom | undefined) => {
         const latest = requireRoom(stored);
         const viewer = getPlayer(latest, token);
         completeRoundIfNeeded(latest);
+        if (botIsDue(latest)) runBotStep(latest);
         return toView(latest, viewer);
       });
       res.json(recovered);
@@ -663,6 +851,7 @@ router.post("/rush10/rooms/:code/start", async (req, res) => {
     }
     dealRound(room, room.players[room.dealerIndex % room.players.length].id);
     recordEvent(room, player.id, "deal");
+    scheduleBot(room, dealPauseMs(room));
     return toView(room, player);
     });
     res.json(response);
@@ -698,113 +887,26 @@ router.post("/rush10/rooms/:code/action", async (req, res) => {
       if (room.status !== "finished") endGameByLeaving(room, player);
       return toView(room, player);
     }
-    assertCurrentTurn(room, player);
-    const cardIds = input.cardIds ?? [];
-    if (input.action === "draw-deck" || input.action === "draw-discard") {
-      if (room.turnState !== "draw") throw new GameError("Draw one card before playing.");
-      if (input.action === "draw-deck") {
-        player.hand.push(drawOne(room));
+    if (input.action === "add-bot" || input.action === "remove-bot" || input.action === "set-bot-level") {
+      if (player.id !== room.hostPlayerId) throw new GameError("Only the host can change bots.", 403);
+      if (room.status !== "waiting") throw new GameError("Bots can only be changed before the game starts.");
+      if (input.action === "add-bot") {
+        addBot(room, input.botLevel ?? "medium");
+        return toView(room, player);
+      }
+      const bot = room.players.find(candidate => candidate.id === input.targetPlayerId && candidate.isBot);
+      if (!bot) throw new GameError("That bot is not in this game.");
+      if (input.action === "set-bot-level") {
+        if (!input.botLevel) throw new GameError("Choose a skill level for the bot.");
+        bot.botLevel = input.botLevel;
       } else {
-        const top = room.discardPile.at(-1);
-        if (top?.type === "skip") {
-          throw new GameError("You can't draw a Skip from the discard pile");
-        }
-        const card = room.discardPile.pop();
-        if (!card) throw new GameError("There is no discard card to pick up.");
-        player.hand.push(card);
+        room.players = room.players.filter(candidate => candidate !== bot);
+        room.message = `${bot.name} left the game.`;
       }
-      room.turnState = "discard";
-      room.message = ""; // Drawing is shown by the card-flight animation, not a banner.
-      // Never include a privately drawn card in the public animation log.
-      recordEvent(room, player.id, input.action);
-    } else if (input.action === "lay-phase") {
-      if (room.turnState !== "discard") throw new GameError("Draw a card before laying your level.");
-      if (player.hasLaidPhase) throw new GameError("You have already laid your level this round.");
-      const newMelds = validatePhaseInput(player, input.melds ?? []);
-      room.melds.push(...newMelds);
-      player.hasLaidPhase = true;
-      room.message = `${player.name} laid Level ${player.phase}.`;
-      recordEvent(room, player.id, "lay-phase");
-    } else if (input.action === "hit") {
-      if (room.turnState !== "discard") throw new GameError("Draw a card before adding cards to a pile.");
-      if (!player.hasLaidPhase) throw new GameError("Lay down your own level before adding cards to a pile.");
-      if (!cardIds.length || !input.meldId) throw new GameError("Choose cards and one laid-down pile.");
-      const meld = room.melds.find((candidate) => candidate.id === input.meldId);
-      if (!meld) throw new GameError("That pile is no longer in the game.");
-      if (new Set(cardIds).size !== cardIds.length) throw new GameError("A card can only be used once.");
-      const selected = cardIds.map(id => {
-        const card = player.hand.find(card => card.id === id);
-        if (!card) throw new GameError("Choose cards from your hand.");
-        return card;
-      });
-      if (selected.some(card => card.type === "skip")) throw new GameError("Skip cards cannot be added to a pile.");
-      let low = meld.low;
-      let high = meld.high;
-      if (meld.type === "group") {
-        if (selected.some(card => card.type === "number" && card.value !== meld.declaredValue)) throw new GameError("All selected cards must match the Group.");
-      } else if (meld.type === "sequence") {
-        if (selected.length === 1) {
-          const value = input.declaredValue;
-          if (!value || (value !== low! - 1 && value !== high! + 1) || (selected[0].type === "number" && selected[0].value !== value) || value < 1 || value > 12) {
-            throw new GameError("A Sequence can only be extended by its next consecutive number (1–12).");
-          }
-          if (value === low! - 1) low = value;
-          else high = value;
-        } else {
-          const numbers = selected.filter(card => card.type === "number").map(card => card.value!);
-          const size = high! - low! + 1 + selected.length;
-          let bounds: { low: number; high: number } | undefined;
-          if (new Set(numbers).size === numbers.length && !numbers.some(n => n >= low! && n <= high!)) {
-            for (let start = Math.max(1, low! - selected.length); start <= low!; start++) {
-              const end = start + size - 1;
-              if (end >= high! && end <= 12 && numbers.every(n => n >= start && n <= end)) {
-                bounds = { low: start, high: end };
-                break;
-              }
-            }
-          }
-          if (!bounds) throw new GameError("All selected cards must extend the Sequence without gaps (1–12).");
-          low = bounds.low;
-          high = bounds.high;
-        }
-      } else if (selected.some(card => card.type === "number" && card.color !== meld.declaredColor)) {
-        throw new GameError("All selected cards must match the color level.");
-      }
-      // Commit only after validating every card, never a partial selection.
-      meld.low = low;
-      meld.high = high;
-      player.hand = player.hand.filter((card) => !cardIds.includes(card.id));
-      meld.cardIds.push(...cardIds);
-      meld.cards.push(...selected);
-      for (const card of selected) recordEvent(room, player.id, "hit", card);
-      room.message = `${player.name} added ${selected.length === 1 ? "a card" : `${selected.length} cards`} to ${room.players.find((candidate) => candidate.id === meld.ownerId)?.name ?? "a player"}'s pile.`;
-    } else if (input.action === "discard") {
-      if (room.turnState !== "discard") throw new GameError("Draw a card before discarding.");
-      if (cardIds.length !== 1) throw new GameError("Discard one card to end your turn.");
-      const selected = player.hand.find((card) => card.id === cardIds[0]);
-      if (!selected) throw new GameError("Choose a card from your hand.");
-      let skippedPlayer: GamePlayer | undefined;
-      if (selected.type === "skip") {
-        const targetId = input.targetPlayerId || (room.players.length === 2 ? room.players.find(candidate => candidate.id !== player.id)?.id : undefined);
-        skippedPlayer = room.players.find(candidate => candidate.id === targetId && candidate.id !== player.id);
-        if (!skippedPlayer) {
-          throw new GameError("Choose another player to skip.");
-        }
-        room.skippedPlayerIds.add(skippedPlayer.id);
-      }
-      player.hand = player.hand.filter((card) => card.id !== selected.id);
-      room.discardPile.push(selected);
-      recordEvent(room, player.id, "discard", selected, skippedPlayer?.id);
-      if (player.hand.length === 0) {
-        finishRound(room, player);
-      } else {
-        advanceTurn(room);
-        if (skippedPlayer && room.currentPlayerId === player.id) {
-          room.message = `${player.name}'s turn again because they skipped ${skippedPlayer.name}.`;
-        }
-      }
+      return toView(room, player);
     }
-    completeRoundIfNeeded(room);
+    playTurn(room, player, input);
+    scheduleBot(room);
     return toView(room, player);
     });
     res.json(response);

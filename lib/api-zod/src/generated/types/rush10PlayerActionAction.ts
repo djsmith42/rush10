@@ -18,4 +18,7 @@ export const Rush10PlayerActionAction = {
   'set-avatar': 'set-avatar',
   'set-name': 'set-name',
   leave: 'leave',
+  'add-bot': 'add-bot',
+  'remove-bot': 'remove-bot',
+  'set-bot-level': 'set-bot-level',
 } as const;

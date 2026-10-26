@@ -104,12 +104,15 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
     });
   }
 
-  /** Clear on blank-space press, before hand pointer capture can retarget a card's click. */
-  function boardClick(event: ReactPointerEvent) {
-    if (!selected.length) return;
-    const target = event.target as HTMLElement;
-    if (target.closest('button, select, input, label, a')) return;
-    setSelected([]);
+  /** Clear on a click that both starts and ends on blank space. A touch scroll never clicks, so swiping to
+   *  reach a pile keeps the selection; checking the press too ignores a hand drag's retargeted click. */
+  const pressedBlank = useRef(false);
+  const isBlank = (target: EventTarget) => !(target as HTMLElement).closest('button, select, input, label, a');
+  function boardPress(event: ReactPointerEvent) { pressedBlank.current = isBlank(event.target); }
+  function boardClick(event: React.MouseEvent) {
+    const blank = pressedBlank.current && isBlank(event.target);
+    pressedBlank.current = false;
+    if (blank && selected.length) setSelected([]);
   }
 
   // Selection order is preserved in hand order so recognition is deterministic.
@@ -203,7 +206,7 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
 
   return <div className="table-felt relative min-h-[100dvh]" data-testid="game-table">
    <SkipSplash room={room} />
-   <div ref={bgRef} className="game-layout relative flex min-h-[100dvh] flex-col" onPointerDown={boardClick} aria-hidden={over || undefined}>
+   <div ref={bgRef} className="game-layout relative flex min-h-[100dvh] flex-col" onPointerDown={boardPress} onClick={boardClick} aria-hidden={over || undefined}>
     {/* Top rail */}
     <header className="relative z-20 flex items-center justify-between gap-3 px-4 pt-3 md:px-8">
       <button onClick={requestExit} data-testid="button-exit" className="table-chip">Exit Game</button>

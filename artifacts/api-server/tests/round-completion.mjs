@@ -7,7 +7,7 @@ const source = await readFile(new URL('../src/routes/rush10.ts', import.meta.url
 const completion = source.slice(source.indexOf('function completeRoundIfNeeded('), source.indexOf('function handleError('));
 const hitStart = source.indexOf('} else if (input.action === "hit") {');
 const hit = source.slice(hitStart + '} else if (input.action === "hit") {'.length, source.indexOf('} else if (input.action === "discard")', hitStart));
-assert.match(source, /completeRoundIfNeeded\(room\);\s+return toView\(room, player\)/, 'all moves use completion check');
+assert.match(source, /function playTurn\([^]*?completeRoundIfNeeded\(room\);\n\}/, 'every move, human or computer, ends with the completion check');
 assert.match(source, /completeRoundIfNeeded\(latest\)/, 'saved-room recovery uses completion check');
 const card = (id, value) => ({ id, value, type: 'number', color: 'red' });
 function fixture() {

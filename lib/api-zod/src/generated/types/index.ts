@@ -7,6 +7,7 @@
  */
 
 export * from './healthStatus';
+export * from './rush10BotLevel';
 export * from './rush10Card';
 export * from './rush10CardType';
 export * from './rush10GameEvent';

@@ -1,6 +1,6 @@
 import { motion, useReducedMotion } from 'framer-motion';
 import type { Rush10Meld, Rush10Player } from '@workspace/api-client-react';
-import { Check, Crown, Plus } from 'lucide-react';
+import { Bot, Check, Crown, Plus } from 'lucide-react';
 import { AnimalAvatar } from '@/components/avatars';
 import { CardBack, PlayingCard } from '@/components/cards';
 import { laidCardOrder } from '@/lib/laid-card-order';
@@ -43,7 +43,7 @@ export function SeatIdentity({ player, active, align = 'center', levelTitle, siz
       {player.isHost && <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#FFB800] text-[#111827] ring-2 ring-[#111827]" aria-label="Host"><Crown size={9} /></span>}
     </span>
     <span className="min-w-0 text-left">
-      <span className={`block truncate font-bold leading-tight text-white ${localPlayer ? 'text-[31.5px]' : 'max-w-[150px] text-sm'}`} data-testid={`text-player-name-${player.id}`}>{player.name}</span>
+      <span className={`flex items-center gap-1 font-bold leading-tight text-white ${localPlayer ? 'text-[31.5px]' : 'max-w-[150px] text-sm'}`} data-testid={`text-player-name-${player.id}`}><span className="min-w-0 truncate">{player.name}</span>{player.isBot && <Bot size={13} className="shrink-0 text-[#94A3B8]" aria-label="Bot" />}</span>
       <span className={`flex items-center gap-1 font-semibold leading-tight ${localPlayer ? 'mt-1 text-[24.75px]' : 'text-[11px]'}`} data-testid={`text-player-level-${player.id}`}>
         <span className={`shrink-0 ${!localPlayer && player.hasLaidPhase ? 'text-[#A3E635]' : 'text-[#FFB800]'}`}>Level {player.phase}{localPlayer && levelTitle ? ':' : ''}</span>
         {localPlayer && levelTitle && <span className="font-normal text-white">{levelTitle}</span>}

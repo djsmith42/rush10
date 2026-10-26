@@ -308,7 +308,7 @@ components:
           type: string
         action:
           type: string
-          enum: [draw-deck, draw-discard, lay-phase, hit, discard, set-avatar, set-name, leave]
+          enum: [draw-deck, draw-discard, lay-phase, hit, discard, set-avatar, set-name, leave, add-bot, remove-bot, set-bot-level]
         playerName:
           type: string
           minLength: 1
@@ -328,10 +328,15 @@ components:
           type: string
         targetPlayerId:
           type: string
+        botLevel:
+          $ref: "#/components/schemas/Rush10BotLevel"
         declaredValue:
           type: ["integer", "null"]
         declaredColor:
           type: ["string", "null"]
+    Rush10BotLevel:
+      type: string
+      enum: [easy, medium, hard]
     Rush10TestRoomCreate:
       type: object
       required: [scenario, playerCount]
@@ -399,7 +404,7 @@ components:
           type: ["string", "null"]
     Rush10Player:
       type: object
-      required: [id, name, phase, score, handCount, isHost, hasLaidPhase]
+      required: [id, name, phase, score, handCount, isHost, isBot, hasLaidPhase]
       properties:
         id:
           type: string
@@ -416,6 +421,11 @@ components:
           type: integer
         isHost:
           type: boolean
+        isBot:
+          type: boolean
+          description: A bot run by the server.
+        botLevel:
+          $ref: "#/components/schemas/Rush10BotLevel"
         hasLaidPhase:
           type: boolean
     Rush10Meld:

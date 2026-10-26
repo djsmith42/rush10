@@ -70,6 +70,8 @@ export const CreateRush10RoomResponse = zod.object({
   "score": zod.number().int(),
   "handCount": zod.number().int(),
   "isHost": zod.boolean(),
+  "isBot": zod.boolean().describe('A bot run by the server.'),
+  "botLevel": zod.enum(['easy', 'medium', 'hard']).optional(),
   "hasLaidPhase": zod.boolean()
 })),
   "hostPlayerId": zod.string(),
@@ -181,6 +183,8 @@ export const JoinRush10RoomResponse = zod.object({
   "score": zod.number().int(),
   "handCount": zod.number().int(),
   "isHost": zod.boolean(),
+  "isBot": zod.boolean().describe('A bot run by the server.'),
+  "botLevel": zod.enum(['easy', 'medium', 'hard']).optional(),
   "hasLaidPhase": zod.boolean()
 })),
   "hostPlayerId": zod.string(),
@@ -271,6 +275,8 @@ export const GetRush10RoomResponse = zod.object({
   "score": zod.number().int(),
   "handCount": zod.number().int(),
   "isHost": zod.boolean(),
+  "isBot": zod.boolean().describe('A bot run by the server.'),
+  "botLevel": zod.enum(['easy', 'medium', 'hard']).optional(),
   "hasLaidPhase": zod.boolean()
 })),
   "hostPlayerId": zod.string(),
@@ -349,6 +355,8 @@ export const StartRush10GameResponse = zod.object({
   "score": zod.number().int(),
   "handCount": zod.number().int(),
   "isHost": zod.boolean(),
+  "isBot": zod.boolean().describe('A bot run by the server.'),
+  "botLevel": zod.enum(['easy', 'medium', 'hard']).optional(),
   "hasLaidPhase": zod.boolean()
 })),
   "hostPlayerId": zod.string(),
@@ -405,7 +413,7 @@ export const actInRush10GameBodyPlayerNameMax = 20;
 
 export const ActInRush10GameBody = zod.object({
   "playerToken": zod.string(),
-  "action": zod.enum(['draw-deck', 'draw-discard', 'lay-phase', 'hit', 'discard', 'set-avatar', 'set-name', 'leave']),
+  "action": zod.enum(['draw-deck', 'draw-discard', 'lay-phase', 'hit', 'discard', 'set-avatar', 'set-name', 'leave', 'add-bot', 'remove-bot', 'set-bot-level']),
   "playerName": zod.string().min(1).max(actInRush10GameBodyPlayerNameMax).optional(),
   "avatar": zod.enum(['fox', 'cat', 'bear', 'rabbit', 'owl', 'panda', 'frog', 'penguin']).optional(),
   "cardIds": zod.array(zod.string()).optional(),
@@ -417,6 +425,7 @@ export const ActInRush10GameBody = zod.object({
 })).optional(),
   "meldId": zod.string().optional(),
   "targetPlayerId": zod.string().optional(),
+  "botLevel": zod.enum(['easy', 'medium', 'hard']).optional(),
   "declaredValue": zod.number().int().nullish(),
   "declaredColor": zod.string().nullish()
 })
@@ -445,6 +454,8 @@ export const ActInRush10GameResponse = zod.object({
   "score": zod.number().int(),
   "handCount": zod.number().int(),
   "isHost": zod.boolean(),
+  "isBot": zod.boolean().describe('A bot run by the server.'),
+  "botLevel": zod.enum(['easy', 'medium', 'hard']).optional(),
   "hasLaidPhase": zod.boolean()
 })),
   "hostPlayerId": zod.string(),

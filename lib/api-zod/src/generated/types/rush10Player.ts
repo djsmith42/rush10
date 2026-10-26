@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { Rush10BotLevel } from './rush10BotLevel';
 import type { Rush10PlayerAvatar } from './rush10PlayerAvatar';
 
 export interface Rush10Player {
@@ -15,5 +16,8 @@ export interface Rush10Player {
   score: number;
   handCount: number;
   isHost: boolean;
+  /** A bot run by the server. */
+  isBot: boolean;
+  botLevel?: Rush10BotLevel;
   hasLaidPhase: boolean;
 }

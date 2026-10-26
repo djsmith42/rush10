@@ -106,6 +106,15 @@ export const Rush10PlayerAvatar = {
   penguin: 'penguin',
 } as const;
 
+export type Rush10BotLevel = typeof Rush10BotLevel[keyof typeof Rush10BotLevel];
+
+
+export const Rush10BotLevel = {
+  easy: 'easy',
+  medium: 'medium',
+  hard: 'hard',
+} as const;
+
 export interface Rush10Player {
   id: string;
   name: string;
@@ -114,6 +123,9 @@ export interface Rush10Player {
   score: number;
   handCount: number;
   isHost: boolean;
+  /** A bot run by the server. */
+  isBot: boolean;
+  botLevel?: Rush10BotLevel;
   hasLaidPhase: boolean;
 }
 
@@ -208,6 +220,9 @@ export const Rush10PlayerActionAction = {
   'set-avatar': 'set-avatar',
   'set-name': 'set-name',
   leave: 'leave',
+  'add-bot': 'add-bot',
+  'remove-bot': 'remove-bot',
+  'set-bot-level': 'set-bot-level',
 } as const;
 
 export type Rush10PlayerActionAvatar = typeof Rush10PlayerActionAvatar[keyof typeof Rush10PlayerActionAvatar];
@@ -255,6 +270,7 @@ export interface Rush10PlayerAction {
   melds?: Rush10MeldInput[];
   meldId?: string;
   targetPlayerId?: string;
+  botLevel?: Rush10BotLevel;
   /** @nullable */
   declaredValue?: number | null;
   /** @nullable */

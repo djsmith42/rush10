@@ -18,7 +18,7 @@ import {
   useCheckRush10RoomJoinable,
 } from '@workspace/api-client-react';
 import type { Rush10PlayerAction, Rush10RoomSession, Rush10RoomView } from '@workspace/api-client-react';
-import { ArrowLeft, ArrowRight, Check, ChevronDown, Clipboard, Layers, LoaderCircle, RefreshCw, Users, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Bot, Check, ChevronDown, Clipboard, Layers, LoaderCircle, RefreshCw, Users, X } from 'lucide-react';
 import { SUIT, CARD_FACE, suitLabel, isSpecial, type SuitKey } from '@/components/cards';
 import { AvatarPicker, normalizeAvatar, type AvatarKind } from '@/components/avatars';
 import { PlayerTile } from '@/components/room-bits';
@@ -455,6 +455,7 @@ function RoomPage() {
   );
 
   const myAvatar = normalizeAvatar(self?.avatar);
+  const isHost = room.hostPlayerId === self?.id;
   const takenBy: Partial<Record<AvatarKind, string>> = {};
   room.players.forEach(p => { if (p.id !== selfId) takenBy[normalizeAvatar(p.avatar)] = p.name; });
 
@@ -487,8 +488,13 @@ function RoomPage() {
             </div>}
             <div className="mt-8 grid gap-3">
               <h2 className="text-xl font-bold text-white">Players:</h2>
-              {room.players.map((player) => <PlayerTile key={player.id} player={player.id === self?.id && nameDraft.trim() ? { ...player, name: nameDraft.trim() } : player} self={player.id === self?.id} avatarPulse={player.id === self?.id ? avatarPulse : 0} unboxed />)}
-              {room.players.length < 6 && <div className="flex min-h-[74px] items-center gap-3 px-3 text-sm font-semibold text-white drop-shadow-[0_2px_4px_rgba(0,0,0,1)]"><div className="flex h-10 w-10 items-center justify-center"><Users size={16} /></div>Waiting for a player...</div>}
+              {room.players.map((player) => <PlayerTile key={player.id} player={player.id === self?.id && nameDraft.trim() ? { ...player, name: nameDraft.trim() } : player} self={player.id === self?.id} avatarPulse={player.id === self?.id ? avatarPulse : 0} unboxed
+                onRemove={isHost && player.isBot ? () => perform('remove-bot', { targetPlayerId: player.id }) : undefined}
+                onBotLevel={isHost && player.isBot ? botLevel => perform('set-bot-level', { targetPlayerId: player.id, botLevel }) : undefined} />)}
+              {room.players.length < 6 && <div className="flex flex-col items-start gap-3 px-3 text-sm font-semibold text-white drop-shadow-[0_2px_4px_rgba(0,0,0,1)]">
+                <span className="flex min-h-[74px] items-center gap-3"><span className="flex h-10 w-10 items-center justify-center"><Users size={16} /></span>Waiting for a player...</span>
+                {isHost && <button type="button" onClick={() => perform('add-bot')} disabled={isBusy} data-testid="button-add-bot" className="flex items-center gap-2 rounded-xl border border-[#334155] bg-[#0F172A] px-4 py-2.5 font-bold text-white transition enabled:hover:border-[#A3E635] disabled:opacity-60"><Bot size={16} className="text-[#A3E635]" /> Add a bot player</button>}
+              </div>}
             </div>
             <div className="mt-8 flex flex-col items-center gap-4 py-4 text-center">
               {room.hostPlayerId === self?.id ? <button onClick={start} disabled={isBusy || room.players.length < 2} data-testid="button-start-game" className={`flex items-center justify-center gap-2 rounded-xl border-2 px-6 py-3 font-bold opacity-100 shadow-[0_8px_24px_rgba(0,0,0,.8),0_0_0_3px_rgba(17,24,39,.9)] transition enabled:hover:translate-y-[-1px] disabled:opacity-100 ${room.players.length < 2 ? 'cursor-default! border-[#64748B] bg-[#475569] text-[#CBD5E1]' : 'border-white bg-[#FF3366] text-white disabled:cursor-not-allowed'}`}>{startGame.isPending ? <LoaderCircle size={17} className="animate-spin" /> : <ArrowRight size={17} />} Start game</button> : <div className="flex items-center gap-2 text-xs font-semibold text-[#94A3B8]"><LoaderCircle size={15} className="animate-spin" /> Waiting for the host to deal</div>}
