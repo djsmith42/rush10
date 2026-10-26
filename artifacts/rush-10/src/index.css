@@ -169,6 +169,9 @@ input::placeholder { color:#64748B; }
   .game-layout > [data-self-hand] { grid-column:1 / -1; grid-row:5; }
 }
 .hand-card { box-shadow:-6px 10px 22px rgba(0,0,0,.42); transition:box-shadow .2s ease; cursor:grab; }
+/* Deal and draw flights wear the resting hand shadow so the landing handoff is invisible. */
+.deal-flight-card { box-shadow:-6px 10px 22px rgba(0,0,0,.42); }
+.deal-flight-lift { box-shadow:-14px 30px 44px rgba(0,0,0,.38); }
 .hand-card.is-raised { box-shadow:-4px 22px 36px rgba(0,0,0,.55); }
 .hand-card.is-selected { box-shadow:0 0 0 3px #A3E635, 0 22px 38px rgba(0,0,0,.55); }
 

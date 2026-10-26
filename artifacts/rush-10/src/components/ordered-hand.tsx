@@ -72,7 +72,7 @@ type Drag = {
   target: HTMLElement;
 };
 
-type Flight = { id: string; nonce: number; from: IncomingDraw['from']; to: { left: number; top: number; rotation: number } };
+type Flight = { id: string; nonce: number; from: IncomingDraw['from']; to: { left: number; top: number; rotation: number }; landed?: boolean };
 
 /** Fan geometry derived from the available width and card count. */
 function useFan(width: number, n: number, height: number) {
@@ -137,13 +137,15 @@ export function OrderedHand({ cards, storageKey, selected, toggleCard, color, in
   const [dealOrigin, setDealOrigin] = useState<DealOrigin | null>(null);
   const [dealMeasureTick, setDealMeasureTick] = useState(0);
   const [landed, setLanded] = useState<string[]>([]);
+  // Landed flights linger a couple of frames over their revealed hand card, then clear.
+  const [cleared, setCleared] = useState<string[]>([]);
   useLayoutEffect(() => {
     onDealingChange?.(dealing);
     return () => onDealingChange?.(false);
   }, [dealing, onDealingChange]);
   useEffect(() => {
-    if (dealing && dealTargets.length > 0 && dealTargets.every(target => landed.includes(target.id))) setDealing(false);
-  }, [dealing, dealTargets, landed]);
+    if (dealing && dealTargets.length > 0 && dealTargets.every(target => cleared.includes(target.id))) setDealing(false);
+  }, [dealing, dealTargets, cleared]);
   const dragRef = useRef<Drag | null>(null);
   const suppressClick = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -390,7 +392,7 @@ export function OrderedHand({ cards, storageKey, selected, toggleCard, color, in
         const t = n > 1 ? (index / (n - 1)) * 2 - 1 : 0;
         const rot = t * maxAngle;
         const arcY = t * t * sag;
-        const inFlight = flight?.id === id || (dealing && !landed.includes(id));
+        const inFlight = (flight?.id === id && !flight.landed) || (dealing && !landed.includes(id));
         const raised = isFocus || isHover;
         return <motion.div key={id} layout="position" transition={spring}
           ref={(el: HTMLDivElement | null) => { if (el) slotRefs.current.set(id, el); else slotRefs.current.delete(id); }}
@@ -430,20 +432,19 @@ export function OrderedHand({ cards, storageKey, selected, toggleCard, color, in
       <div aria-hidden className="shrink-0" style={{ width: EDGE_PAD }} />
     </div>
     <span id="hand-reorder-hint" className="sr-only">Press Alt plus Left or Right arrow to move this card.</span>
-    {dealing && dealOrigin && dealTargets.filter(target => !landed.includes(target.id)).map(target => {
+    {dealing && dealOrigin && dealTargets.filter(target => !cleared.includes(target.id)).map(target => {
       const card = cards.find(card => card.id === target.id);
       return card && <DealFlight key={target.id} card={card} destination={target} origin={dealOrigin}
-        width={cw} height={ch} background={color(card, shown.indexOf(card.id))}
-        onLand={() => setLanded(previous => {
-          const next = previous.includes(target.id) ? previous : [...previous, target.id];
-          return next;
-        })} />;
+        width={cw} height={ch} background={color(card, shown.indexOf(card.id))} landed={landed.includes(target.id)}
+        onLand={() => setLanded(previous => previous.includes(target.id) ? previous : [...previous, target.id])}
+        onDone={() => setCleared(previous => previous.includes(target.id) ? previous : [...previous, target.id])} />;
     })}
     {flight && flightCard && <DealFlight key={flight.nonce} card={flightCard}
       destination={{ id: flight.id, x: flight.to.left, y: flight.to.top, rotation: flight.to.rotation, delay: 0 }}
       origin={{ x: flight.from.left, y: flight.from.top, width: flight.from.width, height: flight.from.height }}
-      width={cw} height={ch} background={color(flightCard, shown.indexOf(flightCard.id))}
-      onLand={() => setFlight(current => current?.nonce === flight.nonce ? null : current)} />}
+      width={cw} height={ch} background={color(flightCard, shown.indexOf(flightCard.id))} landed={!!flight.landed}
+      onLand={() => setFlight(current => current?.nonce === flight.nonce ? { ...current, landed: true } : current)}
+      onDone={() => setFlight(current => current?.nonce === flight.nonce ? null : current)} />}
     {draggedCard && drag && createPortal(
       <div aria-hidden className="pointer-events-none fixed left-0 top-0 z-[100]"
         style={{ transform: `translate3d(${drag.x - drag.offsetX}px, ${drag.y - drag.offsetY}px, 0)` }}>
