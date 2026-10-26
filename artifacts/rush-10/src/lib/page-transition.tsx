@@ -15,11 +15,14 @@ const FALL_MS = 900;
 const ENTER_MS = 1500;
 /** A first load holds on the bare background this long, then plays the entrance this many times slower. */
 const FIRST_LOAD = { holdMs: 1000, slowdown: 2 };
-type Entrance = typeof FIRST_LOAD;
+export type Entrance = typeof FIRST_LOAD;
 const NORMAL: Entrance = { holdMs: 0, slowdown: 1 };
 
 type PageTransition = {
   phase: TransitionPhase;
+  direction: TransitionDirection;
+  /** Hold and slowdown of the current entrance. */
+  entrance: Entrance;
   /** Play the exit, run `swap` to show what comes next, then play the entrance. */
   leave: (swap: () => void, options?: { back?: boolean }) => void;
   go: (path: string, options?: { replace?: boolean; back?: boolean }) => void;
@@ -110,7 +113,7 @@ export function PageTransitionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => clearTimers, []);
 
-  const value = useMemo(() => ({ phase, leave, go }), [phase, leave, go]);
+  const value = useMemo(() => ({ phase, direction, entrance, leave, go }), [phase, direction, entrance, leave, go]);
   return (
     <Context.Provider value={value}>
       <ShownLocationContext.Provider value={shownLocation}>

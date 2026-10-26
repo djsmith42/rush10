@@ -275,14 +275,9 @@ input::placeholder { color:#64748B; }
   font-size:clamp(5rem,22vw,20rem);
 }
 .lobby-backdrop-pile { position:absolute; inset:-6%; filter:blur(9px); transform:translateZ(0); }
-.lobby-backdrop-slot { position:absolute; transform:var(--bd-base); display:none; }
 .lobby-backdrop-paint { position:absolute; inset:0; width:100%; height:100%; }
-/* At rest the canvases stand in for the cards; the cards only show while a transition moves them. */
-.route-stage:not([data-transition="idle"]) .lobby-backdrop-slot { display:block; }
-.route-stage:not([data-transition="idle"]) .lobby-backdrop-paint { display:none; }
 .lobby-backdrop-drift { position:absolute; inset:0; will-change:transform; }
 .lobby-backdrop[data-motion="paused"] .lobby-backdrop-drift { animation-play-state:paused; will-change:auto; }
-.lobby-backdrop-card { box-shadow:0 14px 30px rgba(0,0,0,.45); }
 .lobby-backdrop-shade { position:absolute; inset:0; background:rgb(10 14 26 / .80); }
 .home-card-background h1:not(.brand-wordmark),
 .home-card-background h2,
@@ -318,8 +313,8 @@ input::placeholder { color:#64748B; }
    the backdrop cards sharpen and brighten, then fall away under gravity. The next
    screen's cards fall in from the top, sharp and bright, then blur and darken
    before its foreground fades in. Going back plays it in reverse: cards rise away
-   and the next ones rise in from below. Card motion is prepended to each card's
-   resting transform so it happens in screen space. */
+   and the next ones rise in from below. The cards themselves are drawn into the
+   backdrop canvases (components/lobby-card-backdrop.tsx), which play their motion. */
 .route-stage:not([data-transition="idle"]) { pointer-events:none; }
 .route-stage[data-transition="fade-out"] .page-shell > :not(.lobby-backdrop) { animation:routeFgOut .3s ease forwards; }
 .route-stage[data-transition="fall"] .page-shell > :not(.lobby-backdrop) { opacity:0; }
@@ -330,10 +325,6 @@ input::placeholder { color:#64748B; }
 @keyframes routeFgOut { to { opacity:0; } }
 @keyframes routeFgIn { from { opacity:0; } }
 @media (prefers-reduced-motion: no-preference) {
-  .route-stage[data-transition="fall"] .lobby-backdrop[data-motion="animated"] .lobby-backdrop-slot { animation:backdropFall var(--fall-d) cubic-bezier(.5,0,.9,.4) var(--fall-delay) both; }
-  .route-stage[data-transition="enter"] .lobby-backdrop[data-motion="animated"] .lobby-backdrop-slot { animation:backdropEnter calc(var(--in-d) * var(--enter-slowdown, 1)) cubic-bezier(.16,.84,.3,1) calc(var(--in-delay) * var(--enter-slowdown, 1) + var(--enter-hold, 0s)) both; }
-  .route-stage[data-direction="back"][data-transition="fall"] .lobby-backdrop[data-motion="animated"] .lobby-backdrop-slot { animation-name:backdropRise; }
-  .route-stage[data-direction="back"][data-transition="enter"] .lobby-backdrop[data-motion="animated"] .lobby-backdrop-slot { animation-name:backdropEnterBack; }
   .route-stage[data-transition="fade-out"] .lobby-backdrop[data-motion="animated"] .lobby-backdrop-pile { animation:backdropSharpen .3s ease forwards; }
   .route-stage[data-transition="fade-out"] .lobby-backdrop[data-motion="animated"] .lobby-backdrop-shade { animation:backdropBrighten .3s ease forwards; }
   .route-stage[data-transition="fall"] .lobby-backdrop[data-motion="animated"] .lobby-backdrop-pile { filter:none; }
@@ -343,22 +334,6 @@ input::placeholder { color:#64748B; }
 }
 @keyframes backdropSharpen { from { filter:blur(9px); } to { filter:blur(0); } }
 @keyframes backdropBrighten { from { opacity:1; } to { opacity:0; } }
-@keyframes backdropFall {
-  from { transform:translate3d(0,0,0) rotate(0deg) var(--bd-base); }
-  to { transform:translate3d(var(--fall-x),150vh,0) rotate(var(--fall-r)) var(--bd-base); }
-}
-@keyframes backdropEnter {
-  from { transform:translate3d(var(--in-x),var(--in-y),0) rotate(var(--in-r)) var(--bd-base); }
-  to { transform:translate3d(0,0,0) rotate(0deg) var(--bd-base); }
-}
-@keyframes backdropRise {
-  from { transform:translate3d(0,0,0) rotate(0deg) var(--bd-base); }
-  to { transform:translate3d(var(--fall-x),-150vh,0) rotate(var(--fall-r)) var(--bd-base); }
-}
-@keyframes backdropEnterBack {
-  from { transform:translate3d(var(--in-x),var(--in-y-back),0) rotate(var(--in-r)) var(--bd-base); }
-  to { transform:translate3d(0,0,0) rotate(0deg) var(--bd-base); }
-}
 @media (prefers-reduced-motion: reduce) {
   .route-stage[data-transition="enter"] .page-shell:has(> .lobby-backdrop) > :not(.lobby-backdrop) { animation-delay:0s; }
 }

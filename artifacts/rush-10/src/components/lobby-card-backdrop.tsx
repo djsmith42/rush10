@@ -1,6 +1,7 @@
-import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { Rush10Card } from '@workspace/api-client-react';
-import { CARD_FACE, FACE_W, PlayingCard, SUIT, cardHeight, isSpecial, suitLabel, suitOf } from '@/components/cards';
+import { CARD_FACE, FACE_W, SUIT, cardHeight, isSpecial, suitLabel, suitOf } from '@/components/cards';
+import { usePageTransition, type Entrance, type TransitionDirection, type TransitionPhase } from '@/lib/page-transition';
 import { useBackgroundMotion } from './use-background-motion';
 
 /** Deterministic PRNG so the pile never reshuffles between renders/polls. */
@@ -74,15 +75,15 @@ function buildPile(cols: number, rows: number): Placed[] {
 }
 
 /**
- * Overlapping cards inside a composited layer each get their own GPU layer; hundreds of them exhaust GPU memory
- * and the browser starts dropping layers, so hovered elements flicker out. At rest each drift group is painted
- * into one canvas instead, and the card elements only show while a page transition moves them.
+ * Hundreds of overlapping card elements would each need their own GPU layer while they move; that exhausts GPU
+ * memory and the browser drops layers, so cards flicker out. Instead each drift group is one canvas that draws
+ * its cards from pre-rendered sprites, at rest and through page transitions alike, so nothing is ever swapped.
  */
 const DRIFT_GROUPS = 4;
-type Group = { p: Placed; i: number }[];
+type Group = Placed[];
 function groupPile(pile: Placed[]) {
   const groups: Group[] = Array.from({ length: DRIFT_GROUPS }, () => []);
-  pile.forEach((p, i) => groups[i % DRIFT_GROUPS].push({ p, i }));
+  pile.forEach((p, i) => groups[i % DRIFT_GROUPS].push(p));
   return groups;
 }
 
@@ -108,8 +109,11 @@ function glyphWidth(ctx: CanvasRenderingContext2D, card: Rush10Card, text: strin
   return ctx.measureText(text).width;
 }
 
-/** A canvas copy of PlayingCard at (0, 0): close enough to swap with the real cards under the blur. */
-function drawCard(ctx: CanvasRenderingContext2D, card: Rush10Card, width: number, scale: number) {
+/** The old box-shadow (0 14px 30px); padding covers its blur (two sigmas) on each side and its drop below. */
+const SHADOW = { color: 'rgba(0,0,0,.45)', blur: 30, y: 14, pad: 30, padBottom: 44 };
+
+/** PlayingCard's face, border and lettering at (0, 0), in CSS pixels. */
+function drawFace(ctx: CanvasRenderingContext2D, card: Rush10Card, width: number, res: number) {
   const height = cardHeight(width);
   const suit = suitOf(card, 0);
   const label = card.type === 'wild' ? 'W' : card.type === 'skip' ? 'SKIP' : String(card.value ?? '?');
@@ -121,12 +125,8 @@ function drawCard(ctx: CanvasRenderingContext2D, card: Rush10Card, width: number
   } else if (suit === 'skip') fill = SUIT.skip;
   ctx.beginPath();
   ctx.roundRect(0, 0, width, height, width * 0.157);
-  ctx.shadowColor = 'rgba(0,0,0,.45)';
-  ctx.shadowBlur = 30;
-  ctx.shadowOffsetY = 14 * scale;
   ctx.fillStyle = fill;
   ctx.fill();
-  ctx.shadowColor = 'transparent';
   ctx.beginPath();
   ctx.roundRect(1, 1, width - 2, height - 2, width * 0.157 - 1);
   ctx.lineWidth = 2;
@@ -147,47 +147,140 @@ function drawCard(ctx: CanvasRenderingContext2D, card: Rush10Card, width: number
   drawGlyph(ctx, card, label, 15, 0, 0);
   ctx.restore();
   if (isSpecial(suit)) {
+    // Canvas shadows ignore the transform, so they are sized in sprite pixels.
     ctx.fillStyle = '#FFFFFF';
     ctx.shadowColor = 'rgba(0,0,0,.25)';
-    ctx.shadowBlur = 4;
-    ctx.shadowOffsetY = 2 * scale;
+    ctx.shadowBlur = 4 * res;
+    ctx.shadowOffsetY = 2 * res;
   }
   drawGlyph(ctx, card, label, card.type === 'skip' ? 29 : 55, 39.5, 61);
   ctx.shadowColor = 'transparent';
 }
 
-/** One drift group's cards at rest, painted once (and again on resize) into a single canvas. */
-function PileCanvas({ group, cardW }: { group: Group; cardW: number }) {
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const canvas = ref.current;
-    const box = canvas?.parentElement;
-    if (!canvas || !box) return;
-    let cancelled = false;
-    const paint = () => {
-      if (cancelled) return;
-      const w = box.clientWidth, h = box.clientHeight;
-      // Device pixels would be wasted under the 9px blur.
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      for (const { p } of group) {
-        ctx.save();
-        ctx.translate(p.left / 100 * w, p.top / 100 * h);
-        ctx.rotate(p.rot * Math.PI / 180);
-        ctx.scale(p.scale, p.scale);
-        ctx.translate(-cardW / 2, -cardHeight(cardW) / 2);
-        drawCard(ctx, p.card, cardW, p.scale);
-        ctx.restore();
-      }
-    };
-    document.fonts.load('15px Bangers').catch(() => undefined).then(paint);
-    const observer = new ResizeObserver(paint);
-    observer.observe(box);
-    return () => { cancelled = true; observer.disconnect(); };
-  }, [group, cardW]);
-  return <canvas ref={ref} className="lobby-backdrop-paint" />;
+type Sprites = { width: number; res: number; faces: Map<string, HTMLCanvasElement> };
+const cardKey = (card: Rush10Card) => card.type === 'number' ? `${card.color}-${card.value}` : card.type;
+let sprites: Sprites | null = null;
+let spriteUsers = 0;
+
+function spriteCanvas(width: number, height: number, res: number) {
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(width * res);
+  canvas.height = Math.ceil(height * res);
+  const ctx = canvas.getContext('2d')!;
+  ctx.scale(res, res);
+  return { canvas, ctx };
+}
+
+/** One sprite per distinct card, shadow included so each card is a single draw; kept while any backdrop is mounted. */
+function spritesFor(pile: Placed[], width: number, res: number) {
+  if (!sprites || sprites.width !== width || sprites.res !== res) sprites = { width, res, faces: new Map() };
+  const height = cardHeight(width);
+  for (const { card } of pile) {
+    const key = cardKey(card);
+    if (sprites.faces.has(key)) continue;
+    const { canvas, ctx } = spriteCanvas(width + SHADOW.pad * 2, height + SHADOW.pad + SHADOW.padBottom, res);
+    ctx.translate(SHADOW.pad, SHADOW.pad);
+    ctx.beginPath();
+    ctx.roundRect(0, 0, width, height, width * 0.157);
+    ctx.shadowColor = SHADOW.color;
+    ctx.shadowBlur = SHADOW.blur * res;
+    ctx.shadowOffsetY = SHADOW.y * res;
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    drawFace(ctx, card, width, res);
+    sprites.faces.set(key, canvas);
+  }
+  return sprites;
+}
+
+/** CSS cubic-bezier timing, solved for x then sampled for y. */
+function bezier(x1: number, y1: number, x2: number, y2: number) {
+  const at = (a: number, b: number, t: number) => ((1 - 3 * b + 3 * a) * t + (3 * b - 6 * a)) * t * t + 3 * a * t;
+  return (x: number) => {
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    let lo = 0, hi = 1, t = x;
+    for (let i = 0; i < 24; i++) {
+      const value = at(x1, x2, t);
+      if (Math.abs(value - x) < 1e-5) break;
+      if (value < x) lo = t; else hi = t;
+      t = (lo + hi) / 2;
+    }
+    return at(y1, y2, t);
+  };
+}
+const FALL_EASE = bezier(.5, 0, .9, .4);
+const ENTER_EASE = bezier(.16, .84, .3, 1);
+
+type Motion = { phase: TransitionPhase; direction: TransitionDirection; entrance: Entrance; elapsed: number; vw: number; vh: number };
+
+/**
+ * Where a card sits mid-transition, as the old CSS keyframes placed it: screen-space translate and rotate about
+ * the card's slot centre, prepended to its resting translate(-50%,-50%) rotate scale. Returns whether it is still moving.
+ */
+function travel(p: Placed, motion: Motion | null, out: { dx: number; dy: number; r: number }) {
+  out.dx = 0; out.dy = 0; out.r = 0;
+  if (!motion) return false;
+  const { travel: t, top } = p;
+  if (motion.phase === 'fall') {
+    const progress = (motion.elapsed - t.fallDelay) / t.fallD;
+    const e = FALL_EASE(progress);
+    out.dx = t.fallX * motion.vw * e;
+    out.dy = (motion.direction === 'back' ? -150 : 150) * motion.vh * e;
+    out.r = t.fallR * e;
+    return progress < 1;
+  }
+  if (motion.phase === 'enter') {
+    const slow = motion.entrance.slowdown;
+    const progress = (motion.elapsed - motion.entrance.holdMs / 1000 - t.inDelay * slow) / (t.inD * slow);
+    const away = 1 - ENTER_EASE(progress);
+    out.dx = parseFloat(t.inX) * motion.vw * away;
+    out.dy = (motion.direction === 'back' ? 145 - top : -(top + 45)) * motion.vh * away;
+    out.r = t.inR * away;
+    return progress < 1;
+  }
+  return false;
+}
+
+const DEG = Math.PI / 180;
+const offset = { dx: 0, dy: 0, r: 0 };
+/** What each canvas last showed at rest, so phase changes that leave the pile still don't repaint it under the blur. */
+const stillPainted = new WeakMap<HTMLCanvasElement, string>();
+
+/** Paints one drift group at the given moment; returns whether any of its cards is still moving. */
+function paintGroup(canvas: HTMLCanvasElement, group: Group, cardW: number, art: Sprites, res: number, motion: Motion | null) {
+  const box = canvas.parentElement;
+  const ctx = canvas.getContext('2d');
+  if (!box || !ctx) return false;
+  const w = box.clientWidth, h = box.clientHeight;
+  const pw = Math.round(w * res), ph = Math.round(h * res);
+  const still = `${pw}x${ph}:${cardW}:${art.res}:${group.length}`;
+  if (!motion && stillPainted.get(canvas) === still) return false;
+  if (motion) stillPainted.delete(canvas); else stillPainted.set(canvas, still);
+  if (canvas.width !== pw || canvas.height !== ph) { canvas.width = pw; canvas.height = ph; }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, pw, ph);
+  // Sprites are drawn near their own size, where bilinear is as good as the costlier filters.
+  ctx.imageSmoothingQuality = 'low';
+  const ch = cardHeight(cardW);
+  const reach = (Math.hypot(cardW, ch) * 1.3) / 2 + SHADOW.padBottom;
+  const spriteW = cardW + SHADOW.pad * 2, spriteH = ch + SHADOW.pad + SHADOW.padBottom;
+  let moving = false;
+  for (const p of group) {
+    const face = art.faces.get(cardKey(p.card));
+    if (!face) continue;
+    moving = travel(p, motion, offset) || moving;
+    // The motion rotates about the slot centre, which sits half a card down-right of the card's centre.
+    const cos = Math.cos(offset.r * DEG), sin = Math.sin(offset.r * DEG);
+    const x = p.left / 100 * w + cardW / 2 + offset.dx - (cos * cardW - sin * ch) / 2;
+    const y = p.top / 100 * h + ch / 2 + offset.dy - (sin * cardW + cos * ch) / 2;
+    if (x < -reach || y < -reach || x > w + reach || y > h + reach) continue;
+    const angle = (offset.r + p.rot) * DEG;
+    const a = Math.cos(angle) * p.scale * res, b = Math.sin(angle) * p.scale * res;
+    ctx.setTransform(a, b, -b, a, x * res, y * res);
+    ctx.drawImage(face, -cardW / 2 - SHADOW.pad, -ch / 2 - SHADOW.pad, spriteW, spriteH);
+  }
+  return moving;
 }
 
 function gridFor(width: number) {
@@ -198,6 +291,7 @@ function gridFor(width: number) {
 
 function LobbyCardBackdropInner() {
   const animate = useBackgroundMotion();
+  const { phase, direction, entrance } = usePageTransition();
   const [width, setWidth] = useState(() => (typeof window === 'undefined' ? 1280 : window.innerWidth));
   useEffect(() => {
     let frame = 0;
@@ -208,6 +302,43 @@ function LobbyCardBackdropInner() {
   const { cols, rows, cardW } = gridFor(width);
   const pile = useMemo(() => buildPile(cols, rows), [cols, rows]);
   const groups = useMemo(() => groupPile(pile), [pile]);
+  const canvases = useRef<(HTMLCanvasElement | null)[]>([]);
+  const [fontsReady, setFontsReady] = useState(() => document.fonts.check('15px Bangers'));
+  useEffect(() => {
+    if (fontsReady) return;
+    let cancelled = false;
+    document.fonts.load('15px Bangers').catch(() => undefined).then(() => { if (!cancelled) setFontsReady(true); });
+    return () => { cancelled = true; };
+  }, [fontsReady]);
+  useEffect(() => {
+    spriteUsers++;
+    // Deferred: a page swap unmounts one backdrop in the same commit that mounts the next.
+    return () => { spriteUsers--; window.setTimeout(() => { if (!spriteUsers) sprites = null; }, 0); };
+  }, []);
+
+  // Layout effect: the first frame of every phase is already painted for it, at rest and mid-flight alike.
+  useLayoutEffect(() => {
+    if (!fontsReady) return;
+    const moves = animate && (phase === 'fall' || phase === 'enter');
+    // Sharp cards need device pixels; at rest the blur hides them, so the canvases stay at CSS size.
+    const res = animate && phase !== 'idle' ? Math.min(2, window.devicePixelRatio || 1) : 1;
+    const art = spritesFor(pile, cardW, Math.min(2, window.devicePixelRatio || 1));
+    const start = performance.now();
+    let frame = 0;
+    const paint = (now: number) => {
+      const motion: Motion | null = moves ? { phase, direction, entrance, elapsed: (now - start) / 1000, vw: window.innerWidth / 100, vh: window.innerHeight / 100 } : null;
+      let moving = false;
+      groups.forEach((group, g) => {
+        const canvas = canvases.current[g];
+        if (canvas) moving = paintGroup(canvas, group, cardW, art, res, motion) || moving;
+      });
+      if (moving) frame = requestAnimationFrame(paint);
+    };
+    paint(start);
+    const observer = new ResizeObserver(() => { if (!moves) paint(performance.now()); });
+    canvases.current.forEach(canvas => canvas?.parentElement && observer.observe(canvas.parentElement));
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); };
+  }, [fontsReady, animate, phase, direction, entrance, pile, groups, cardW]);
 
   return (
     <div className="lobby-backdrop" data-motion={animate ? 'animated' : 'paused'} aria-hidden="true" inert>
@@ -216,19 +347,10 @@ function LobbyCardBackdropInner() {
       <div className="lobby-backdrop-pile">
         {groups.map((group, g) => {
           // Each group drifts as one layer, steered by its first card's motion with a gentler tilt.
-          const lead = group[0].p;
+          const lead = group[0];
           return (
             <div key={g} className="lobby-backdrop-drift" style={{ '--bd-d': `${lead.dur.toFixed(2)}s`, '--bd-delay': `${lead.delay.toFixed(2)}s`, '--bd-x': `${lead.dx.toFixed(1)}px`, '--bd-y': `${lead.dy.toFixed(1)}px`, '--bd-r': `${(lead.dr * 0.15).toFixed(2)}deg` } as CSSProperties}>
-              <PileCanvas group={group} cardW={cardW} />
-              {group.map(({ p, i }) => (
-                <div key={i} className="lobby-backdrop-slot" style={{
-                  left: `${p.left}%`, top: `${p.top}%`, '--bd-base': `translate(-50%,-50%) rotate(${p.rot.toFixed(2)}deg) scale(${p.scale.toFixed(3)})`,
-                  '--fall-x': `${p.travel.fallX.toFixed(1)}vw`, '--fall-r': `${p.travel.fallR.toFixed(1)}deg`, '--fall-d': `${p.travel.fallD.toFixed(2)}s`, '--fall-delay': `${p.travel.fallDelay.toFixed(2)}s`,
-                  '--in-x': p.travel.inX, '--in-y': p.travel.inY, '--in-y-back': p.travel.inYBack, '--in-r': `${p.travel.inR.toFixed(1)}deg`, '--in-d': `${p.travel.inD.toFixed(2)}s`, '--in-delay': `${p.travel.inDelay.toFixed(2)}s`,
-                } as CSSProperties}>
-                  <PlayingCard card={p.card} width={cardW} className="lobby-backdrop-card" />
-                </div>
-              ))}
+              <canvas ref={el => { canvases.current[g] = el; }} className="lobby-backdrop-paint" />
             </div>
           );
         })}
