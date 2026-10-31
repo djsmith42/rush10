@@ -95,6 +95,12 @@ function HomePage() {
   const [joinError, setJoinError] = useState('');
   const [checking, setChecking] = useState(false);
   const saved = readSession();
+  // Only offer to reconnect while the saved seat is still in a game that hasn't finished.
+  const savedRoom = useGetRush10Room(saved?.roomCode ?? '', {
+    query: { enabled: !!saved, queryKey: roomQueryKey(saved?.roomCode ?? '', saved?.playerId), retry: false },
+    request: playerAuth(saved?.playerToken ?? ''),
+  });
+  const canReconnect = !!saved && !!savedRoom.data && savedRoom.data.status !== 'finished';
 
   async function join(event: FormEvent) {
     event.preventDefault();
@@ -150,7 +156,7 @@ function HomePage() {
               <button type="submit" disabled={checking} data-testid="button-join-room" className="flex h-12 items-center gap-2 rounded-xl border-2 border-white/10 px-4 font-bold transition hover:bg-[#A3E635] hover:text-[#111827] hover:border-[#A3E635] disabled:cursor-not-allowed disabled:opacity-45">{checking ? <><LoaderCircle size={16} className="animate-spin" /> Joining…</> : <>Join <ArrowRight size={16} /></>}</button>
               </div>
               {joinError && <p role="alert" className="mt-3 text-sm text-[#FF8FAB]">{joinError}</p>}
-              {saved && <button type="button" onClick={() => go(`/game/${saved.roomCode}`)} data-testid="button-reconnect" className="mt-4 flex w-full items-center justify-between gap-2 rounded-xl bg-[#A3E635]/15 px-4 py-3 text-left text-sm font-semibold text-[#A3E635]">
+              {canReconnect && saved && <button type="button" onClick={() => go(`/game/${saved.roomCode}`)} data-testid="button-reconnect" className="mt-4 flex w-full items-center justify-between gap-2 rounded-xl bg-[#A3E635]/15 px-4 py-3 text-left text-sm font-semibold text-[#A3E635]">
                 <span><RefreshCw size={14} className="mr-2 inline" /> Reconnect to game <span className="mono">{saved.roomCode}</span></span><ArrowRight size={16} className="shrink-0" />
               </button>}
             </form>
