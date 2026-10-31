@@ -125,12 +125,12 @@ function HomePage() {
     <main className="page-shell home-card-background" style={{ '--paper': '#111827' } as CSSProperties}>
       <LobbyCardBackdrop />
       <div className="page-content mx-auto max-w-[1220px] px-5 pb-16 pt-4 md:px-10">
-        <section className="home-hero grid items-center gap-12 pb-0 pt-0 md:grid-cols-[1.03fr_.97fr] md:gap-8">
+        <section className="home-hero grid items-center gap-2 pb-0 pt-0 md:grid-cols-[1.03fr_.97fr] md:gap-8">
           <div className="home-hero-copy fade-up">
-            <h1 className="brand-wordmark origin-left text-[clamp(4.4rem,11vw,9rem)]">
+            <h1 className="brand-wordmark origin-center text-[clamp(4.4rem,11vw,9rem)] md:origin-left">
               RUSH 10
             </h1>
-            <p className="mt-4 text-[1.4rem] font-semibold text-[#FF3366]">A free online card game for 2–6 players</p>
+            <p className="mt-4 text-[1.4rem] font-semibold text-[#FF3366]">A free card game for 2–6 players</p>
           </div>
           <HeroFan />
         </section>
@@ -144,10 +144,10 @@ function HomePage() {
                 <Layers size={17} /> Create a game
               </button>
             </div>
-            <div className="flex flex-col items-center gap-3 text-2xl text-[#64748B] md:w-10">
-              <span aria-hidden="true" className="h-8 w-px bg-current" />
+            <div className="mx-auto flex w-full max-w-sm items-center gap-3 text-2xl text-[#64748B] md:w-10 md:max-w-none md:flex-col">
+              <span aria-hidden="true" className="h-px flex-1 bg-current md:h-8 md:w-px md:flex-none" />
               <span>or</span>
-              <span aria-hidden="true" className="h-8 w-px bg-current" />
+              <span aria-hidden="true" className="h-px flex-1 bg-current md:h-8 md:w-px md:flex-none" />
             </div>
             <form onSubmit={join} noValidate className="mx-auto w-full max-w-sm">
               <h2 className="mb-5 text-2xl font-bold tracking-tight">Join a Game</h2>
@@ -261,7 +261,7 @@ function BackHome({ onClick }: { onClick: () => void }) {
 function HeroFan() {
   const mid = (heroCards.length - 1) / 2;
   return (
-    <div className="hero-fan relative mx-auto h-[300px] w-full max-w-[490px] md:h-[365px]" aria-hidden="true">
+    <div className="hero-fan relative mx-auto h-[230px] w-full max-w-[490px] md:h-[365px]" aria-hidden="true">
       {heroCards.map((card, i) => (
         <div key={i} className="hero-slot" style={{ '--r': `${(i - mid) * 11}deg`, '--x': `${(i - mid) * 18}%`, '--y': `${Math.abs(i - mid) * 10}px`, '--sway-d': `${[4.6, 5.9, 5.2, 6.7, 4.9][i]}s`, '--sway-delay': `${[-0.4, -2.1, -3.7, -1.3, -2.9][i]}s`, '--sway-a': `${[6, 8, 5, 9, 7][i]}px`, zIndex: i + 1 } as CSSProperties}>
         <div className="hero-sway">
