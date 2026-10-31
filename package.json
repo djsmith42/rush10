@@ -11,11 +11,16 @@
     "clean": "rm -rf artifacts/*/dist lib/*/dist && find . -name node_modules -prune -o -name '*.tsbuildinfo' -type f -exec rm -f {} +",
     "build:clean": "pnpm run clean && pnpm run build",
     "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
+    "test:e2e": "playwright test -c e2e"
   },
   "private": true,
   "packageManager": "pnpm@10.34.6",
   "devDependencies": {
+    "@playwright/test": "1.49.1",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "catalog:",
+    "better-sqlite3": "^12.11.1",
     "prettier": "^3.9.6",
     "typescript": "~7.0.2"
   }

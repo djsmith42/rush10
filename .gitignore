@@ -6,3 +6,5 @@ dist/
 *.db-shm
 *.db-wal
 .data/
+e2e-report/
+.e2e-build-*/
