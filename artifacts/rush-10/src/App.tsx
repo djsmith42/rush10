@@ -18,7 +18,7 @@ import {
   useCheckRush10RoomJoinable,
 } from '@workspace/api-client-react';
 import type { Rush10PlayerAction, Rush10RoomSession, Rush10RoomView } from '@workspace/api-client-react';
-import { ArrowLeft, ArrowRight, Bot, Check, ChevronDown, Clipboard, Layers, LoaderCircle, RefreshCw, Users, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Bot, Check, Clipboard, Layers, LoaderCircle, RefreshCw, Users, X } from 'lucide-react';
 import { SUIT, CARD_FACE, suitLabel, isSpecial, type SuitKey } from '@/components/cards';
 import { AvatarPicker, normalizeAvatar, type AvatarKind } from '@/components/avatars';
 import { PlayerTile } from '@/components/room-bits';
@@ -94,8 +94,6 @@ function HomePage() {
   const [roomCode, setRoomCode] = useState('');
   const [joinError, setJoinError] = useState('');
   const [checking, setChecking] = useState(false);
-  const [rulesOpen, setRulesOpen] = useState(false);
-  const rulesQuery = useGetRush10Rules();
   const saved = readSession();
 
   async function join(event: FormEvent) {
@@ -121,8 +119,8 @@ function HomePage() {
     <main className="page-shell home-card-background" style={{ '--paper': '#111827' } as CSSProperties}>
       <LobbyCardBackdrop />
       <div className="page-content mx-auto max-w-[1220px] px-5 pb-16 pt-4 md:px-10">
-        <section className="grid items-center gap-12 pb-0 pt-0 md:grid-cols-[1.03fr_.97fr] md:gap-8">
-          <div className="fade-up">
+        <section className="home-hero grid items-center gap-12 pb-0 pt-0 md:grid-cols-[1.03fr_.97fr] md:gap-8">
+          <div className="home-hero-copy fade-up">
             <h1 className="brand-wordmark origin-left text-[clamp(4.4rem,11vw,9rem)]">
               RUSH 10
             </h1>
@@ -131,7 +129,7 @@ function HomePage() {
           <HeroFan />
         </section>
 
-        <section className="home-entry space-y-28 pt-0">
+        <section className="home-entry mt-12 pt-0 md:mt-16">
           <div className="min-w-0">
             <div className="grid items-start gap-8 md:grid-cols-[1fr_auto_1fr] md:gap-x-4 lg:gap-x-6">
             <div className="mx-auto w-full max-w-sm">
@@ -140,7 +138,7 @@ function HomePage() {
                 <Layers size={17} /> Create a game
               </button>
             </div>
-            <div className="flex flex-col items-center gap-3 text-2xl text-[#64748B]">
+            <div className="flex flex-col items-center gap-3 text-2xl text-[#64748B] md:w-10">
               <span aria-hidden="true" className="h-8 w-px bg-current" />
               <span>or</span>
               <span aria-hidden="true" className="h-8 w-px bg-current" />
@@ -157,26 +155,6 @@ function HomePage() {
               </button>}
             </form>
             </div>
-          </div>
-
-          <div className="py-4 text-white">
-            <div className="flex items-start justify-between">
-              <h2 className="text-2xl font-bold tracking-[-.06em]">The rules are simple:</h2>
-            </div>
-            <p className="mt-4 max-w-3xl text-base leading-relaxed text-[#CBD5E1]">Complete your current level to move up before your opponents. Complete Level 10 to win!</p>
-            {rulesQuery.isLoading ? <div className="mt-6 space-y-3"><div className="h-8 animate-pulse rounded bg-white/10" /><div className="h-8 animate-pulse rounded bg-white/10" /></div> : rulesQuery.isError ? (
-              <button onClick={() => rulesQuery.refetch()} className="mt-5 flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-sm"><RefreshCw size={14} /> Rules unavailable — retry</button>
-            ) : <div className="mt-8 grid grid-cols-2 gap-6 sm:grid-cols-5">
-              {(rulesQuery.data?.phases ?? []).map((phase) => <div key={phase.number} className={`rounded-xl border border-[#334155] bg-[#1E293B] p-4 ${phase.number === 1 ? 'text-[#A3E635]' : 'text-[#CBD5E1]'}`}>
-                <div className="text-xl font-bold">Level {phase.number}</div><div className="mt-3 text-sm font-bold leading-tight">{phase.title}</div>
-              </div>)}
-            </div>}
-            <button onClick={() => setRulesOpen(!rulesOpen)} data-testid="button-rules" className="mt-5 flex items-center gap-2 border-b border-white/20 pb-1 text-xs font-semibold text-[#FFB800] hover:text-white">Read the rules <ChevronDown size={14} className={`transition ${rulesOpen ? 'rotate-180' : ''}`} /></button>
-            {rulesOpen && <div className="mt-4 space-y-4 py-4 text-xs leading-relaxed text-[#CBD5E1]">
-              <div><p className="mb-2 font-bold text-white">Turn by turn</p>{(rulesQuery.data?.turnRules ?? []).map((rule, i) => <p key={i} className="mb-1">{i + 1}. {rule}</p>)}</div>
-              <div><p className="mb-2 font-bold text-white">Scoring</p>{(rulesQuery.data?.scoring ?? []).map((rule, i) => <p key={i} className="mb-1">{rule}</p>)}</div>
-              <div className="border-t border-white/10 pt-3"><p className="font-bold text-white">Level guide</p>{(rulesQuery.data?.phases ?? []).map((phase) => <p key={phase.number} className="mt-1"><span className="font-mono text-[#FFB800]">Level {phase.number}</span> {phase.title} — {phase.description}</p>)}</div>
-            </div>}
           </div>
         </section>
       </div>

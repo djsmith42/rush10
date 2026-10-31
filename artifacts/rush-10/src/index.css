@@ -142,7 +142,7 @@ input::placeholder { color:#64748B; }
   .game-layout [data-self-hand] { margin-bottom:12px; padding-top:0; margin-top:0; }
   .home-card-background > .page-content { padding-top:12px; padding-bottom:24px; }
   .home-card-background > .page-content > section:first-child { padding-top:0; padding-bottom:0; }
-  .home-entry { padding-top:0; }
+  .home-entry { padding-top:0; margin-top:32px; }
   .home-entry > :not(:last-child) { margin-bottom:32px; }
   .waiting-page > .page-content { padding-top:8px; padding-bottom:16px; }
   .waiting-page header { margin-bottom:4px; padding-bottom:4px; }
@@ -265,6 +265,12 @@ input::placeholder { color:#64748B; }
 .lobby-backdrop { position:fixed; inset:0; z-index:0; overflow:hidden; pointer-events:none; user-select:none; }
 .lobby-backdrop * { pointer-events:none !important; }
 /* The Rush 10 wordmark: shared by the backdrop hero and the home heading. */
+/* Start the hero copy at the left edge of the centered, max-w-sm "Create a Game" column below it.
+   Mirrors that grid: 1fr | 2.5rem "or" | 1fr, with gap-x-4 (md) / gap-x-6 (lg). */
+.home-hero { container-type:inline-size; }
+.home-hero-copy { margin-left:max(0px, calc((100cqw - 24rem) / 2)); }
+@media (min-width:768px) { .home-hero-copy { margin-left:max(0px, calc((100cqw - 2.5rem - 2rem) / 4 - 12rem)); } }
+@media (min-width:1024px) { .home-hero-copy { margin-left:max(0px, calc((100cqw - 2.5rem - 3rem) / 4 - 12rem)); } }
 .brand-wordmark {
   font-family:'Bangers', sans-serif; font-weight:400; line-height:1; letter-spacing:.02em; white-space:nowrap; color:#FFB800;
   text-shadow:.04em .04em 0 #FF3366, .08em .08em 0 #2979FF, 0 .1em .4em rgb(0 0 0 / .6);
