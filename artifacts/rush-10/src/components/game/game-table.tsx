@@ -1,5 +1,5 @@
 import { multiHitTarget } from '@/lib/hit-target';
-import React, { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import type { Rush10Card, Rush10Meld, Rush10PlayerAction, Rush10RoomView, Rush10Rules } from '@workspace/api-client-react';
 import { ArrowDown, ArrowRight, CircleHelp, Crown, ListOrdered, LoaderCircle, LogOut, Trophy, X } from 'lucide-react';
@@ -68,6 +68,9 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
   // A dropped card stays parked until its flight lands; it leaves the hand when the server confirms.
   const incomingHits = new Set(flights.pending.flatMap(event => event.kind === 'hit' && event.card ? [event.card.id] : []));
   const parkedShown = !!parked && (room.hand.some(card => card.id === parked.card.id) || flights.pending.some(event => isParkedEvent(event, parked, selfId)));
+  const parkedHidden = parkedShown ? parked!.hidden ?? [parked!.card.id] : undefined;
+  // Your own laid cards are on their way from the hand: their places in the new piles wait for them.
+  if (parkedShown && parked!.kind === 'lay-phase') parked!.cards?.forEach(pose => incomingHits.add(pose.card.id));
   useEffect(() => { if (parked && !parkedShown) setParked(null); }, [parked, parkedShown]);
 
   // Opponents in seating order, starting after you.
@@ -86,6 +89,23 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
     // A draw or a discard keeps the selection, so a group in progress survives the turn.
     const keepSelection = action === 'draw-deck' || action === 'draw-discard' || action === 'discard';
     perform(action, extra, (updated) => { if (!keepSelection) setSelected([]); setTargetPlayerId(''); onDone?.(updated); }, onError);
+  }
+
+  /** Hold cards where they sit in the hand while the move goes to the server, so the flight starts from them
+   *  (not the middle of the hand) and nothing blinks out in between. One card keeps its pose; several make a stack. */
+  function parkFromHand(kind: ParkedDrop['kind'], cards: Rush10Card[]) {
+    if (reduce) return;
+    const poses = cards.flatMap(card => {
+      const el = document.querySelector<HTMLElement>(`[data-testid="card-in-hand-${card.id}"]`);
+      if (!el) return [];
+      // The bounding box of a rotated, scaled card is centred on the card, so its centre is the card's centre.
+      const box = el.getBoundingClientRect();
+      const scale = Number(/scale\(([\d.]+)\)/.exec(el.style.transform)?.[1] ?? 1);
+      const rotate = Number(/rotate\((-?[\d.]+)deg\)/.exec(el.style.transform)?.[1] ?? 0);
+      return [{ card, x: box.left + box.width / 2, y: box.top + box.height / 2, width: el.offsetWidth * scale, rotate }];
+    });
+    if (!poses.length) return;
+    setParked({ kind, ...poses[0], hidden: poses.map(pose => pose.card.id), ...(kind === 'lay-phase' ? { cards: poses } : {}) });
   }
 
   function toggleCard(id: string) {
@@ -128,7 +148,8 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
   const layBlocker = canLay ? null : !isMyTurn ? 'Wait for your turn' : room.turnState === 'draw' ? 'Draw a card first' : null;
   function layPhase() {
     if (!canLay) return;
-    act('lay-phase', { melds: recognition.melds, cardIds: recognition.melds.flatMap(m => m.cardIds) });
+    parkFromHand('lay-phase', selectedCards);
+    act('lay-phase', { melds: recognition.melds, cardIds: recognition.melds.flatMap(m => m.cardIds) }, undefined, () => setParked(null));
   }
 
   const hitIds = draggedId ? (selected.includes(draggedId) ? selected : [draggedId]) : selected;
@@ -138,7 +159,9 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
   function hit(meld: Rush10Meld) {
     const target = multiHitTarget(hitCards, meld);
     if (!canHit || target === null) return;
-    act('hit', { cardIds: hitIds, meldId: meld.id, ...target });
+    // The first card's flight starts from its place in the hand; any others in the batch follow from the hand.
+    parkFromHand('hit', hitCards.slice(0, 1));
+    act('hit', { cardIds: hitIds, meldId: meld.id, ...target }, undefined, () => setParked(null));
   }
 
   const needsSkipTarget = (card: Rush10Card) => card.type === 'skip' && room.players.length > 2 && !targetPlayerId;
@@ -193,6 +216,16 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
   function leaveGame() {
     perform('leave', {}, () => { setConfirmExit(false); onExit(); }, () => setConfirmExit(false));
   }
+
+  // When the round ends the hand may empty and its sort buttons go away. Hold the space both took, or the
+  // laid piles reflow and the whole table jumps under the results.
+  const handSectionRef = useRef<HTMLElement>(null);
+  const handHeight = useRef(0);
+  const sortSize = useRef({ width: 0, height: 0 });
+  useLayoutEffect(() => {
+    if (room.hand.length && handSectionRef.current) handHeight.current = handSectionRef.current.offsetHeight;
+    if (sortSlot?.childElementCount) sortSize.current = { width: sortSlot.offsetWidth, height: sortSlot.offsetHeight };
+  });
 
   const over = isRoundOver || isFinished;
   const bgRef = useRef<HTMLDivElement>(null);
@@ -255,7 +288,7 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
             </button>
             </div>
           </div>
-          <motion.p key={turnLine} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className={`text-center text-lg font-bold tracking-[-.03em] md:text-xl ${isMyTurn ? 'text-[#A3E635]' : 'text-white/85'}`} data-testid="text-turn-status" aria-live="polite">
+          <motion.p key={turnLine} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className={`min-h-[1.75rem] text-center text-lg font-bold tracking-[-.03em] md:text-xl ${isMyTurn ? 'text-[#A3E635]' : 'text-white/85'}`} data-testid="text-turn-status" aria-live="polite">
             {!isMyTurn && currentPlayer && <AnimalAvatar kind={currentPlayer.avatar} size={22} decorative className="mr-2 inline-block -translate-y-[2px] align-middle" />}{turnLine}
           </motion.p>
         </motion.div>
@@ -270,7 +303,8 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
         {myMelds.map(meld => <MeldSpread key={meld.id} meld={meld} ownerName="your" canHit={canHitMeld(meld)} onHit={() => hit(meld)} fresh={freshMelds.has(meld.id)} incoming={incomingHits} />)}
       </div>
       {/* The hand's sort buttons share this row, so the hand needs no header row of its own. */}
-      <div ref={setSortSlot} className="self-center" data-testid="hand-controls" />
+      <div ref={setSortSlot} className="self-center" data-testid="hand-controls"
+        style={!isPlaying && sortSize.current.width ? { minWidth: sortSize.current.width, minHeight: sortSize.current.height } : undefined} />
       {/* Centered on the row (not between its neighbours), raised above the level line so a long level title can pass under it.
           On narrow screens it wraps to its own line. */}
       <div className="order-last flex w-full justify-center empty:hidden md:pointer-events-none md:absolute md:inset-x-0 md:top-1/2 md:order-none md:-translate-y-[calc(50%+1.25rem)]">
@@ -290,14 +324,15 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
     </section>
 
     {/* Your hand: the lower third */}
-    <section className="relative z-30 mb-3 w-full" data-self-hand data-keep-selection aria-label="Your hand">
+    <section ref={handSectionRef} className="relative z-30 mb-3 w-full" data-self-hand data-keep-selection aria-label="Your hand"
+      style={room.hand.length === 0 && handHeight.current ? { minHeight: handHeight.current } : undefined}>
       {room.hand.length === 0 ? <p className="py-14 text-center text-sm text-[#94A3B8]">{isPlaying ? 'Your hand is empty.' : 'Your hand will appear here when the round begins.'}</p> : (
         <OrderedHand key={`${code}-${selfId}-${room.roundNumber}`} storageKey={`rush10-hand-${code}-${selfId}`}
           deal={isPlaying ? [...(room.events ?? [])].reverse().find(event => event.kind === 'deal') : undefined}
           onDealingChange={setDealingHand} dealDelay={dealDelay}
-          onDragCardChange={setDraggedId} onDropCards={dropCards} hiddenIds={parkedShown ? [parked!.card.id] : undefined}
+          onDragCardChange={setDraggedId} onDropCards={dropCards} hiddenIds={parkedHidden}
           cards={room.hand} selected={selected} toggleCard={toggleCard} color={cardColor} incoming={incoming} controlsSlot={sortSlot}
-          locked={!isPlaying} renderAction={isPlaying && isMyTurn && room.turnState === 'discard' ? (card: Rush10Card) => <span className="flex items-center gap-1.5">{card.type === 'skip' && room.players.length > 2 && <label className="table-select"><span>Skip</span><select value={targetPlayerId} onChange={e => setTargetPlayerId(e.target.value)} onPointerDown={e => e.stopPropagation()} data-testid="select-skip-target"><option value="">Choose target</option>{room.players.filter(p => p.id !== selfId).map(p => <option value={p.id} key={p.id}>{p.name}</option>)}</select></label>}<button type="button" onClick={() => discard(card)} disabled={isBusy || needsSkipTarget(card)} data-testid="button-discard" aria-label={`Discard ${cardLabel(card)}`} className="discard-pill">{actPending ? <LoaderCircle size={13} className="animate-spin" /> : <ArrowDown size={13} />} Discard</button></span> : undefined} />
+          locked={!isPlaying} renderAction={isPlaying && isMyTurn && room.turnState === 'discard' ? (card: Rush10Card) => <span className="flex items-center gap-1.5">{card.type === 'skip' && room.players.length > 2 && <label className="table-select"><span>Skip</span><select value={targetPlayerId} onChange={e => setTargetPlayerId(e.target.value)} onPointerDown={e => e.stopPropagation()} data-testid="select-skip-target"><option value="">Choose target</option>{room.players.filter(p => p.id !== selfId).map(p => <option value={p.id} key={p.id}>{p.name}</option>)}</select></label>}<button type="button" onClick={() => { parkFromHand('discard', [card]); discard(card, () => setParked(null)); }} disabled={isBusy || needsSkipTarget(card)} data-testid="button-discard" aria-label={`Discard ${cardLabel(card)}`} className="discard-pill">{actPending ? <LoaderCircle size={13} className="animate-spin" /> : <ArrowDown size={13} />} Discard</button></span> : undefined} />
       )}
     </section>
 

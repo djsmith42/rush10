@@ -1,4 +1,4 @@
-import { expect, rig, seed, stored, test, unusedCode } from '../lib/harness';
+import { act, expect, rig, seed, stored, test, unusedCode } from '../lib/harness';
 
 test.describe('Home and creating a game', () => {
   test('home page shows the hero, Create and Join', async ({ h }) => {
@@ -47,13 +47,12 @@ test.describe('Home and creating a game', () => {
     await h.snap(page, 'Spaces only: Create disabled');
   });
 
-  test('Enter in the name field does not create a game', async ({ h }) => {
+  test('Enter in the name field creates the game', async ({ h }) => {
     const page = await h.open(undefined, { path: '/new' });
     await page.getByTestId('input-player-name').fill('Ava');
     await page.getByTestId('input-player-name').press('Enter');
-    await page.waitForTimeout(800);
-    await h.snap(page, 'After pressing Enter in the name field');
-    await expect(page).toHaveURL(/\/new$/);
+    await expect(page.getByText('Invite players to join')).toBeVisible();
+    await h.snap(page, 'Created with Enter');
   });
 
   test('the last name used is remembered', async ({ h }) => {
@@ -162,6 +161,16 @@ test.describe('Joining a game', () => {
     await h.snap(page, 'Game already started');
   });
 
+  test('cannot join a lobby that closed', async ({ h }) => {
+    const { code, seats } = seed({ status: 'waiting', players: [{ name: 'Ava' }, { name: 'Botley', isBot: true }] });
+    await act(code, seats[0], 'leave');
+    const page = await h.open();
+    await page.getByTestId('input-room-code').fill(code);
+    await page.getByTestId('button-join-room').click();
+    await expect(page.getByRole('alert')).toHaveText('This game has ended.');
+    await h.snap(page, 'Lobby closed');
+  });
+
   test('cannot join a full game of six', async ({ h }) => {
     const { code } = seed({ status: 'waiting', players: ['Ava', 'Ben', 'Cleo', 'Dev', 'Eli', 'Fay'].map(name => ({ name })) });
     const page = await h.open();
@@ -174,8 +183,8 @@ test.describe('Joining a game', () => {
   test('join link for a nonexistent game reports it', async ({ h }) => {
     const page = await h.open(undefined, { path: `/join/${unusedCode()}` });
     const started = Date.now();
-    // The lookup retries with backoff before it reports, so this takes several seconds.
-    await expect(page.getByRole('alert')).toHaveText("There's no game with that code", { timeout: 15_000 });
+    // No retries, so the answer comes from the first lookup.
+    await expect(page.getByRole('alert')).toHaveText("There's no game with that code", { timeout: 2_000 });
     await h.note('Time until the error appeared', `${((Date.now() - started) / 1000).toFixed(1)}s`);
     await h.snap(page, 'Join link, no such game');
   });

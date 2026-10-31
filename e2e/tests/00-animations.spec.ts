@@ -1,4 +1,5 @@
 import { act, dragTo, expect, hand, pick, seed, stored, test, type MeldSpec } from '../lib/harness';
+import { analyzeMotion, startMotion, stopMotion } from '../lib/motion';
 import type { Page } from '@playwright/test';
 
 // Animation tests run with motion enabled and attach GIFs; everything else runs with reduced motion.
@@ -234,9 +235,10 @@ test.describe('Animations: table moments @animation', () => {
     const g = seed({ turnState: 'discard', melds: [{ owner: 0, type: 'group', cards: ['R7', 'B7', 'G7', 'Y7', 'W'] }, { owner: 0, type: 'group', cards: ['R2', 'B2', 'G2'] }],
       players: [{ name: 'Ava', hand: ['G4'], hasLaidPhase: true, phase: 10 }, { name: 'Ben', hand: ['R1'], phase: 7, score: 85 }] });
     const ava = await h.open({ code: g.code, seat: g.seats[0] }, ANIMATE);
+    await pick(ava, 'G4_1');
     await ava.waitForTimeout(400);
     await h.gif(ava, 'Ava wins', async () => {
-      await act(g.code, g.seats[0], 'discard', { cardIds: ['G4_1'] });
+      await ava.getByTestId('button-discard').click();
       await expect(ava.getByTestId('text-game-over')).toBeVisible({ timeout: 4000 });
       await ava.waitForTimeout(2200);
     });
@@ -284,5 +286,97 @@ test.describe('Animations: table moments @animation', () => {
     await expect(hidden(ava)).toHaveCount(0);
     await expect(flights(ava)).toHaveCount(0);
     await h.snap(ava, 'All ten cards, no flights');
+  });
+});
+
+// Every GIF above is also checked frame by frame (lib/motion.ts). These target the riskiest moves on their own.
+test.describe('Motion quality @animation', () => {
+  test.describe.configure({ mode: 'default' });
+
+  test('the motion checks catch a teleport, a pop-in, a snapped shadow and a hitch', async ({ h }) => {
+    const page = await h.open();
+    await page.evaluate(() => {
+      const card = (name: string, x: number, y: number, extra = '') => {
+        const el = document.createElement('div');
+        el.setAttribute('data-meld-card', name);
+        el.style.cssText = `position:fixed;left:0;top:0;width:60px;height:90px;background:#fff;border-radius:9px;z-index:999;transform:translate(${x}px,${y}px);${extra}`;
+        document.body.append(el);
+      };
+      card('smooth', 40, 60);
+      card('jumper', 40, 200);
+      card('popper', 700, 400, 'opacity:0');
+      card('popper2', 820, 400, 'opacity:0');
+      card('shadow', 500, 60);
+    });
+    await startMotion(page);
+    await page.evaluate(() => new Promise<void>(resolve => {
+      const el = (name: string) => document.querySelector<HTMLElement>(`[data-meld-card="${name}"]`)!;
+      const [smooth, jumper, popper, popper2, shadow] = ['smooth', 'jumper', 'popper', 'popper2', 'shadow'].map(el);
+      const start = performance.now();
+      let stalled = false;
+      const step = (now: number) => {
+        const t = now - start;
+        smooth.style.transform = `translate(${40 + Math.min(1, t / 900) * 400}px,60px)`;
+        jumper.style.transform = `translate(${t < 300 ? 40 + t / 10 : 400}px,200px)`;
+        // Two pops at different moments, so one landing on a frame the checks skip as slow can't hide both.
+        if (t > 400) popper.style.opacity = '1';
+        if (t > 850) popper2.style.opacity = '1';
+        if (t > 200) shadow.style.boxShadow = '0 18px 34px rgba(0,0,0,.5)';
+        if (t > 550 && !stalled) { stalled = true; const until = performance.now() + 320; while (performance.now() < until) { /* hitch */ } }
+        if (t < 1100) requestAnimationFrame(step); else resolve();
+      };
+      requestAnimationFrame(step);
+    }));
+    const report = analyzeMotion(await stopMotion(page));
+    await h.note('Detector report', report);
+    const ids = (list: Array<{ what: string }>) => list.map(issue => issue.what.split(' ')[0]);
+    expect(ids(report.teleports)).toContain('laid:jumper');
+    expect(ids(report.popIns).filter(id => id.startsWith('laid:popper')).length).toBeGreaterThan(0);
+    expect(ids(report.shadowPops)).toContain('laid:shadow');
+    expect(report.stalls.length).toBeGreaterThan(0);
+    for (const list of [report.teleports, report.popIns, report.vanishes, report.shadowPops]) expect(ids(list)).not.toContain('laid:smooth');
+  });
+
+  test('sorting slides every card to its new place', async ({ h }) => {
+    const g = seed({ players: [{ name: 'Ava', hand: ['S', 'R12', 'W', 'B2', 'G9', 'Y2', 'R1', 'B11', 'G5', 'Y7'] }, { name: 'Ben', hand: BEN }] });
+    const ava = await h.open({ code: g.code, seat: g.seats[0] }, ANIMATE);
+    await ava.waitForTimeout(400);
+    await h.gif(ava, 'Sort my hand, then sort by color', async () => {
+      await ava.getByTestId('button-sort-hand').click();
+      await ava.waitForTimeout(900);
+      await ava.getByTestId('button-sort-hand-color').click();
+      await ava.waitForTimeout(900);
+    });
+  });
+
+  test('click-adding a card: it stays out of the pile until its flight lands', async ({ h }) => {
+    const g = seed({ turnState: 'discard', players: [
+      { name: 'Ava', hand: ['W', 'Y12', 'R2'], hasLaidPhase: true }, { name: 'Ben', hand: BEN, phase: 2, hasLaidPhase: true }, { name: 'Cleo', hand: ['G4'] },
+    ], melds: [
+      { owner: 0, type: 'group', cards: ['R7', 'B7', 'G7'] }, { owner: 0, type: 'group', cards: ['R11', 'B11', 'G11'] },
+      { id: 'ben-run', owner: 1, type: 'sequence', cards: ['Y3', 'B4', 'G5', 'R6'] }, { owner: 1, type: 'group', cards: ['R10', 'Y10', 'G10'] },
+    ] });
+    const ava = await h.open({ code: g.code, seat: g.seats[0] }, ANIMATE);
+    await pick(ava, 'W_1');
+    await ava.waitForTimeout(400);
+    await h.gif(ava, 'Click the Sequence to add the Wild', async () => {
+      await ava.getByTestId('button-hit-ben-run').click();
+      await expect(ava.getByTestId('button-hit-ben-run').locator('[data-meld-card]')).toHaveCount(5);
+      await ava.waitForTimeout(1200);
+    });
+  });
+
+  test('dealing the next round: results leave, then cards fly in', async ({ h }) => {
+    const g = seed({ turnState: 'discard', melds: [{ owner: 0, type: 'group', cards: ['R7', 'B7', 'G7'] }, { owner: 0, type: 'group', cards: ['R9', 'B9', 'G9'] }],
+      players: [{ name: 'Ava', hand: ['G4'], hasLaidPhase: true }, { name: 'Ben', hand: ['R1'] }] });
+    await act(g.code, g.seats[0], 'discard', { cardIds: ['G4_1'] });
+    const ava = await h.open({ code: g.code, seat: g.seats[0] }, ANIMATE);
+    await expect(ava.getByTestId('button-next-round')).toBeVisible();
+    await ava.waitForTimeout(1200);
+    await h.gif(ava, 'Deal the next round', async () => {
+      await ava.getByTestId('button-next-round').click();
+      await expect(ava.locator('[data-testid^="card-in-hand-"]')).toHaveCount(10);
+      await expect(hidden(ava)).toHaveCount(0, { timeout: 8000 });
+    }, { tailMs: 500 });
   });
 });

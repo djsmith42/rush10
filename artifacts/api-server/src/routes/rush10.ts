@@ -161,6 +161,7 @@ function requireRoom(room: GameRoom | undefined) {
 }
 
 function assertJoinable(room: GameRoom) {
+  if (room.status === "finished") throw new GameError("This game has ended.");
   if (room.status !== "waiting") throw new GameError("This game has already started. Rejoin with your saved player session.");
   if (room.players.length >= 6) throw new GameError("This game already has six players.");
 }
@@ -424,7 +425,24 @@ function endGameByLeaving(room: GameRoom, player: GamePlayer) {
   room.message = `${player.name} left the game.`;
 }
 
-const TEST_NAMES = ["Ava", "Ben", "Cleo", "Dev", "Eli", "Fay"];
+/** Leaving before the deal frees the seat. A departing host hands over to the next person; with nobody left, the lobby closes. */
+function leaveLobby(room: GameRoom, player: GamePlayer) {
+  room.players = room.players.filter(candidate => candidate !== player);
+  room.message = `${player.name} left the game.`;
+  if (room.hostPlayerId !== player.id) return;
+  const nextHost = room.players.find(candidate => !candidate.isBot);
+  if (!nextHost) {
+    room.players = [];
+    room.status = "finished";
+    room.endReason = "player-left";
+    room.endedByPlayerId = player.id;
+    return;
+  }
+  nextHost.isHost = true;
+  room.hostPlayerId = nextHost.id;
+}
+
+const TEST_NAMES =["Ava", "Ben", "Cleo", "Dev", "Eli", "Fay"];
 const randomInt = (min: number, max: number) => min + Math.floor(Math.random() * (max - min + 1));
 
 /** Take one card matching `want` out of the draw pile, falling back to a Wild. */
@@ -883,8 +901,8 @@ router.post("/rush10/rooms/:code/action", async (req, res) => {
       return toView(room, player);
     }
     if (input.action === "leave") {
-      if (room.status === "waiting") throw new GameError("The game has not started yet.");
-      if (room.status !== "finished") endGameByLeaving(room, player);
+      if (room.status === "waiting") leaveLobby(room, player);
+      else if (room.status !== "finished") endGameByLeaving(room, player);
       return toView(room, player);
     }
     if (input.action === "add-bot" || input.action === "remove-bot" || input.action === "set-bot-level") {

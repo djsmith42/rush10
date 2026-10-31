@@ -18,7 +18,7 @@ import {
   useCheckRush10RoomJoinable,
 } from '@workspace/api-client-react';
 import type { Rush10PlayerAction, Rush10RoomSession, Rush10RoomView } from '@workspace/api-client-react';
-import { ArrowLeft, ArrowRight, Bot, Check, Clipboard, Layers, LoaderCircle, RefreshCw, Users, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Bot, Check, Clipboard, Layers, LoaderCircle, LogOut, RefreshCw, Users, X } from 'lucide-react';
 import { SUIT, CARD_FACE, suitLabel, isSpecial, type SuitKey } from '@/components/cards';
 import { AvatarPicker, normalizeAvatar, type AvatarKind } from '@/components/avatars';
 import { PlayerTile } from '@/components/room-bits';
@@ -181,7 +181,8 @@ function NamePage() {
   const busy = createRoom.isPending || joinRoom.isPending;
   const validCode = joining && ROOM_CODE.test(code);
   const joinable = useCheckRush10RoomJoinable(code, {
-    query: { enabled: validCode, queryKey: getCheckRush10RoomJoinableQueryKey(code), refetchInterval: 3000 },
+    // No retries: a bad code should say so at once, not after several seconds of backoff.
+    query: { enabled: validCode, queryKey: getCheckRush10RoomJoinableQueryKey(code), refetchInterval: 3000, retry: false },
   });
   const others = joinable.data?.playerNames ?? [];
   const lookupError = joinable.isError
@@ -290,12 +291,14 @@ function RoomPage() {
   const [avatarPulse, setAvatarPulse] = useState(0);
   const [nameDraft, setNameDraft] = useState('');
   const [editingName, setEditingName] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const nameTimer = useRef<number | undefined>(undefined);
   const rulesQuery = useGetRush10Rules();
   const token = session?.roomCode.toUpperCase() === code ? session.playerToken : '';
   const roomKey = roomQueryKey(code, session?.playerId);
   const roomQuery = useGetRush10Room(code, {
-    query: { enabled: !!code && !!token, queryKey: roomKey, refetchInterval: 900 },
+    // Stop polling once this seat has left; the next poll would only fail.
+    query: { enabled: !!code && !!token && !leaving, queryKey: roomKey, refetchInterval: 900 },
     request: playerAuth(token),
   });
   const startGame = useStartRush10Game();
@@ -349,6 +352,21 @@ function RoomPage() {
     startGame.mutate({ code, data: { playerToken: token } }, {
       onSuccess: updateRoom,
       onError: (reason) => setNotice(errorMessage(reason, 'Could not start the game.')),
+    });
+  }
+
+  /** Give up this seat before the deal; the saved session goes too, so home won't offer to reconnect. */
+  function leaveLobby() {
+    if (!token || leaving) return;
+    setNotice('');
+    setLeaving(true);
+    void queryClient.cancelQueries({ queryKey: roomKey });
+    act.mutate({ code, data: { playerToken: token, action: 'leave' } }, {
+      onSuccess: () => {
+        if (readSession()?.playerToken === token) localStorage.removeItem(SESSION_KEY);
+        go('/', { back: true });
+      },
+      onError: (reason) => { setLeaving(false); setNotice(errorMessage(reason, 'Could not leave the game. Try again.')); },
     });
   }
 
@@ -483,6 +501,7 @@ function RoomPage() {
             <div className="mt-8 flex flex-col items-center gap-4 py-4 text-center">
               {room.hostPlayerId === self?.id ? <button onClick={start} disabled={isBusy || room.players.length < 2} data-testid="button-start-game" className={`flex items-center justify-center gap-2 rounded-xl border-2 px-6 py-3 font-bold opacity-100 shadow-[0_8px_24px_rgba(0,0,0,.8),0_0_0_3px_rgba(17,24,39,.9)] transition enabled:hover:translate-y-[-1px] disabled:opacity-100 ${room.players.length < 2 ? 'cursor-default! border-[#64748B] bg-[#475569] text-[#CBD5E1]' : 'border-white bg-[#FF3366] text-white disabled:cursor-not-allowed'}`}>{startGame.isPending ? <LoaderCircle size={17} className="animate-spin" /> : <ArrowRight size={17} />} Start game</button> : <div className="flex items-center gap-2 text-xs font-semibold text-[#94A3B8]"><LoaderCircle size={15} className="animate-spin" /> Waiting for the host to deal</div>}
               {room.players.length < 2 && <div><p className="text-sm font-bold">Need at least one more player</p><p className="mt-1 text-xs text-[#94A3B8]">Rush 10 is for 2–6 players.</p></div>}
+              {self && <button type="button" onClick={leaveLobby} disabled={isBusy || leaving} data-testid="button-leave-lobby" className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-[#94A3B8] transition hover:text-white disabled:opacity-50">{leaving ? <LoaderCircle size={15} className="animate-spin" /> : <LogOut size={15} />} Leave game</button>}
             </div>
           </section>
         </div>

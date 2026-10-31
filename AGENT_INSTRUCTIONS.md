@@ -190,8 +190,8 @@ Home page:
 - Top padding is small, with no extra section padding above “Enter your Name”.
 - Separate name entry from the unboxed Create/Join choices.
 - Keep reconnect beneath the Join controls.
-- Pressing Enter in the NAME field must do NOTHING.
-- Creating a game uses an explicit button, not an implicitly submitted form.
+- The home page has explicit Create and Join buttons; the name is entered on the next page (/new or /join/:code).
+- Pressing Enter in the name field on /new creates the game, and on /join/:code joins it.
 - Enter in the GAME CODE field still joins.
 - A nonexistent code shows “There's no game with that code” under the join controls, not a raw HTTP error.
 

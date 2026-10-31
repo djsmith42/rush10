@@ -8,6 +8,8 @@ const STALE_MS = 8000;
 const SPRITE_W = 60;
 const SEAT_SCALE = 0.55;
 const EASE = [0.22, 1, 0.36, 1] as const;
+// Quick but not explosive off the mark: EASE starts at 4.5× the average speed, which reads as a jump.
+const FLIGHT_EASE = [0.33, 0.85, 0.4, 1] as const;
 
 /**
  * Consumes unseen public table events. The first event list seen is hydration (never animated);
@@ -53,12 +55,14 @@ export function useTableEvents(room: Rush10RoomView | undefined, selfId: string 
 
 type Box = { x: number; y: number; w: number };
 
-/** A card the local player dropped on the discard pile or a laid pile, held at its drop spot until its flight plays. */
-export type ParkedDrop = { kind: 'discard' | 'hit'; card: Rush10Card; x: number; y: number; width: number; rotate: number };
+/** A card the local player played (dropped, discarded or added to a pile), or the stack they laid down, held where
+ *  it left the hand until its flight plays. That covers the frame between the server's reply and the flight starting. */
+export type ParkedPose = { card: Rush10Card; x: number; y: number; width: number; rotate: number };
+export type ParkedDrop = ParkedPose & { kind: 'discard' | 'hit' | 'lay-phase'; hidden?: string[]; cards?: ParkedPose[] };
 
 /** Whether this event is the flight for the parked card. */
 export function isParkedEvent(event: Rush10GameEvent, parked: ParkedDrop, selfId?: string) {
-  return event.kind === parked.kind && event.playerId === selfId && event.card?.id === parked.card.id;
+  return event.kind === parked.kind && event.playerId === selfId && (event.kind === 'lay-phase' || event.card?.id === parked.card.id);
 }
 
 function boxOf(selector: string): Box | null {
@@ -96,7 +100,11 @@ function route(event: Rush10GameEvent, selfId?: string, parked?: ParkedDrop | nu
       if (drop) return { from: dropBox, to: target, fromScale: drop.width / SPRITE_W, toScale, dropped: { rotate: drop.rotate, toRotate: 0 } };
       return { from: hand, to: target, fromScale: handScale, toScale };
     }
-    case 'lay-phase': return { from: hand, to: boxOf(`[data-meld-zone="${event.playerId}"]`), fromScale: handScale, toScale: 0.8 };
+    case 'lay-phase': {
+      const zone = boxOf(`[data-meld-zone="${event.playerId}"]`);
+      if (drop) return { from: dropBox, to: zone, fromScale: drop.width / SPRITE_W, toScale: 0.8, dropped: { rotate: drop.rotate, toRotate: 0 } };
+      return { from: hand, to: zone, fromScale: handScale, toScale: 0.8 };
+    }
     default: return { from: null, to: null, fromScale: 1, toScale: 1 };
   }
 }
@@ -117,10 +125,10 @@ function Sprite({ event, selfId, parked, onDone }: { event: Rush10GameEvent; sel
   }, [event, selfId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!path?.from || !path.to) return parked ? <ParkedCard parked={parked} /> : null;
+  if (event.kind === 'lay-phase' && parked?.cards?.length) return <LaidCardsFlight cards={parked.cards} to={path.to} onDone={() => doneRef.current()} />;
   const { from, to, fromScale, toScale, dropped } = path;
   // A dropped card is already in the player's grip: start from its exact pose instead of fading in from the hand.
   const h = SPRITE_W * 1.52;
-  const midX = (from.x + to.x) / 2;
   const midY = Math.min(from.y, to.y) - 70;
   const isLay = event.kind === 'lay-phase';
   const faceUp = !!event.card && (event.kind === 'discard' || event.kind === 'hit');
@@ -137,19 +145,27 @@ function Sprite({ event, selfId, parked, onDone }: { event: Rush10GameEvent; sel
         y: [from.y - h / 2, to.y - h / 2],
         scale: [fromScale, toScale],
         rotate: [startRotate, dropped.toRotate],
-        opacity: 1,
+        // A laid stack melts into the piles flipping in under it rather than blinking out.
+        opacity: isLay ? [1, 1, 0] : 1,
       } : {
-        x: [from.x - SPRITE_W / 2, midX - SPRITE_W / 2, to.x - SPRITE_W / 2],
+        x: [from.x - SPRITE_W / 2, to.x - SPRITE_W / 2],
         y: [from.y - h / 2, midY - h / 2, to.y - h / 2],
         scale: [fromScale, Math.max(fromScale, toScale) * 1.12, toScale],
         rotate: [startRotate, 8 * toward, 0],
-        opacity: [startOpacity, 1, 1],
+        opacity: isLay ? [startOpacity, 1, 1, 0] : [startOpacity, 1, 1],
       }}
-      transition={dropped ? { duration: 0.42, ease: EASE } : { duration: isLay ? 0.8 : 0.66, ease: EASE, times: [0, 0.48, 1] }}
+      // One ease across the whole sideways move, and an arc that slows into its top and speeds out of it, so the
+      // card's speed never jumps: easing each half separately made it stall at the top and then lurch.
+      transition={dropped
+        ? { duration: isLay ? 0.6 : 0.42, ease: EASE, ...(isLay ? { opacity: { duration: 0.6, times: [0, 0.7, 1] } } : {}) }
+        : (() => {
+          const duration = isLay ? 0.8 : 0.66;
+          const arc = { duration, times: [0, 0.48, 1], ease: ['easeOut', 'easeIn'] as const };
+          return { duration, x: { duration, ease: FLIGHT_EASE }, y: arc, scale: arc, rotate: { ...arc, ease: ['easeOut', 'easeInOut'] as const },
+            opacity: isLay ? { duration, times: [0, 0.3, 0.75, 1] } : { duration, times: [0, 0.3, 1] } };
+        })()}
       onAnimationComplete={() => doneRef.current()}>
-      {isLay ? <div className="relative h-full w-full">
-        {[-14, 0, 14].map((r, i) => <CardBack key={i} width={SPRITE_W} className="absolute left-0 top-0 shadow-[0_14px_30px_rgba(0,0,0,.5)]" style={{ transform: `translateX(${(i - 1) * 16}px) rotate(${r}deg)`, transformOrigin: '50% 100%' }} />)}
-      </div> : faceUp && event.card
+      {isLay ? <LaidStack /> : faceUp && event.card
         ? <PlayingCard card={event.card} width={SPRITE_W} className="shadow-[0_18px_36px_rgba(0,0,0,.55)]" />
         : <CardBack width={SPRITE_W} className="shadow-[0_18px_36px_rgba(0,0,0,.55)]" />}
     </motion.div>,
@@ -157,8 +173,38 @@ function Sprite({ event, selfId, parked, onDone }: { event: Rush10GameEvent; sel
   );
 }
 
+/** Three fanned backs: a level on its way to the table. */
+function LaidStack() {
+  return <div className="relative h-full w-full">
+    {[-14, 0, 14].map((r, i) => <CardBack key={i} width={SPRITE_W} className="absolute left-0 top-0 shadow-[0_14px_30px_rgba(0,0,0,.5)]" style={{ transform: `translateX(${(i - 1) * 16}px) rotate(${r}deg)`, transformOrigin: '50% 100%' }} />)}
+  </div>;
+}
+
+/** Your own level: each laid card leaves its place in the hand and lands on its own place in the new piles,
+ *  which stay empty until it arrives. */
+function LaidCardsFlight({ cards, to, onDone }: { cards: ParkedPose[]; to: Box; onDone: () => void }) {
+  const h = SPRITE_W * 1.52;
+  const [targets] = useState(() => cards.map(pose => boxOf(`[data-meld-card="${pose.card.id}"]`) ?? to));
+  return createPortal(<>{cards.map((pose, i) => {
+    const target = targets[i];
+    const scale = target === to ? 0.8 : target.w / SPRITE_W;
+    return <motion.div key={pose.card.id} aria-hidden className="pointer-events-none fixed left-0 top-0 z-[120]"
+      style={{ width: SPRITE_W, height: h }}
+      initial={{ x: pose.x - SPRITE_W / 2, y: pose.y - h / 2, rotate: pose.rotate, scale: pose.width / SPRITE_W }}
+      animate={{ x: target.x - SPRITE_W / 2, y: target.y - h / 2, rotate: 0, scale }}
+      transition={{ duration: 0.6, delay: i * 0.03, ease: EASE }}
+      onAnimationComplete={i === cards.length - 1 ? onDone : undefined}>
+      <PlayingCard card={pose.card} width={SPRITE_W} className="shadow-[0_18px_36px_rgba(0,0,0,.55)]" />
+    </motion.div>;
+  })}</>, document.body);
+}
+
 function ParkedCard({ parked }: { parked: ParkedDrop }) {
   const h = SPRITE_W * 1.52;
+  if (parked.cards?.length) return createPortal(<>{parked.cards.map(pose => <div key={pose.card.id} aria-hidden className="pointer-events-none fixed left-0 top-0 z-[120]"
+    style={{ width: SPRITE_W, height: h, transform: `translate(${pose.x - SPRITE_W / 2}px, ${pose.y - h / 2}px) rotate(${pose.rotate}deg) scale(${pose.width / SPRITE_W})` }}>
+    <PlayingCard card={pose.card} width={SPRITE_W} className="shadow-[0_18px_36px_rgba(0,0,0,.55)]" />
+  </div>)}</>, document.body);
   return createPortal(
     <div aria-hidden className="pointer-events-none fixed left-0 top-0 z-[120]"
       style={{ width: SPRITE_W, height: h, transform: `translate(${parked.x - SPRITE_W / 2}px, ${parked.y - h / 2}px) rotate(${parked.rotate}deg) scale(${parked.width / SPRITE_W})` }}>

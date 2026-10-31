@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { API_URL, DATABASE_PATH } from './env';
+import { analyzeMotion, startMotion, stopMotion, type MotionReport } from './motion';
 
 const run = promisify(execFile);
 
@@ -206,8 +207,10 @@ export class Harness {
     await this.info.attach(label, { body: typeof value === 'string' ? value : JSON.stringify(value, null, 2), contentType: 'text/plain' });
   }
 
-  /** Record `page` while `action` runs (plus a short tail) and attach an animated GIF. */
-  async gif(page: Page, label: string, action: () => Promise<void>, { tailMs = 400, width = 600 } = {}) {
+  /** Record `page` while `action` runs (plus a short tail) and attach an animated GIF.
+   *  Unless `motion` is false, every frame is also checked for teleports, pop-ins, shadow snaps, duplicates and jank. */
+  async gif(page: Page, label: string, action: () => Promise<void>, { tailMs = 400, width = 600, motion = true } = {}): Promise<MotionReport | undefined> {
+    if (motion) await startMotion(page);
     const cdp = await page.context().newCDPSession(page);
     const frames: Array<{ data: string; t: number }> = [];
     cdp.on('Page.screencastFrame', frame => {
@@ -222,7 +225,11 @@ export class Harness {
       await cdp.send('Page.stopScreencast').catch(() => {});
       await cdp.detach().catch(() => {});
     }
-    if (frames.length === 0) return;
+    const trace = motion ? await stopMotion(page) : undefined;
+    if (trace && process.env.E2E_MOTION_TRACE) writeFileSync(path.join(tmpdir(), `motion-${label.replace(/\W+/g, '-')}.json`), JSON.stringify(trace));
+    const report = trace ? analyzeMotion(trace) : undefined;
+    if (report) await this.checkMotion(label, report);
+    if (frames.length === 0) return report;
     const dir = mkdtempSync(path.join(tmpdir(), 'rush10-gif-'));
     try {
       const end = Date.now() / 1000;
@@ -244,6 +251,22 @@ export class Harness {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+    return report;
+  }
+
+  /** Attach a motion summary and fail (softly, so the GIF is kept) on anything that didn't move smoothly. */
+  async checkMotion(label: string, report: MotionReport) {
+    const lines = [
+      `${report.frames} frames over ${report.seconds}s · p95 frame ${report.p95FrameMs}ms · longest ${report.maxFrameMs}ms · ${report.longFrames} frames over 50ms · longest script block ${report.maxBlockingMs}ms`,
+      ...(['teleports', 'popIns', 'vanishes', 'shadowPops', 'duplicates', 'stalls'] as const).flatMap(kind => report[kind].map(issue => `${kind} @${issue.at}ms: ${issue.what}`)),
+    ];
+    await this.note(`Motion: ${label}`, lines.join('\n'));
+    expect.soft(report.teleports, `${label}: cards that teleported instead of moving`).toEqual([]);
+    expect.soft(report.popIns, `${label}: cards that appeared out of nowhere`).toEqual([]);
+    expect.soft(report.vanishes, `${label}: cards that vanished on the spot`).toEqual([]);
+    expect.soft(report.shadowPops, `${label}: shadows that snapped on`).toEqual([]);
+    expect.soft(report.duplicates, `${label}: cards shown twice`).toEqual([]);
+    expect.soft(report.stalls, `${label}: frames that hitched while cards were moving`).toEqual([]);
   }
 
   async close() {

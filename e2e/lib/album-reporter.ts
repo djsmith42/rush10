@@ -30,7 +30,20 @@ export default class AlbumReporter implements Reporter {
   private mediaDir = path.join(REPORT_DIR, 'media');
   private n = 0;
 
+  private resultsFile = path.join(REPORT_DIR, 'results.json');
+  private earlierMs = 0;
+
   onBegin() {
+    // The second phase of `pnpm test:e2e` adds to the first phase's album instead of starting over.
+    if (process.env.E2E_APPEND) {
+      try {
+        const saved = JSON.parse(readFileSync(this.resultsFile, 'utf8')) as { entries: Entry[]; n: number; ms: number };
+        this.entries = saved.entries;
+        this.n = saved.n;
+        this.earlierMs = saved.ms;
+        return;
+      } catch { /* Nothing to add to. */ }
+    }
     rmSync(this.mediaDir, { recursive: true, force: true });
     mkdirSync(this.mediaDir, { recursive: true });
   }
@@ -57,6 +70,8 @@ export default class AlbumReporter implements Reporter {
   }
 
   onEnd(result: FullResult) {
+    const totalMs = this.earlierMs + result.duration;
+    writeFileSync(this.resultsFile, JSON.stringify({ entries: this.entries, n: this.n, ms: totalMs }));
     const passed = this.entries.filter(e => e.status === 'passed').length;
     const failed = this.entries.filter(e => e.status === 'failed' || e.status === 'timedOut').length;
     const skipped = this.entries.length - passed - failed;
@@ -87,7 +102,7 @@ img{max-width:min(540px,100%);border:1px solid rgba(127,127,127,.35);display:blo
 pre{white-space:pre-wrap;font-size:12px;max-width:540px;max-height:320px;overflow:auto;background:rgba(127,127,127,.12);padding:6px;margin:0}
 pre.err{max-width:none;color:var(--destructive,#dc2626)}
 </style>
-<h1><span class=p>${passed} passed</span>${failed ? `, <span class=f>${failed} failed</span>` : ''}${skipped ? `, ${skipped} skipped` : ''} · ${(result.duration / 1000).toFixed(1)}s · ${new Date().toLocaleString()}</h1>
+<h1><span class=p>${passed} passed</span>${failed ? `, <span class=f>${failed} failed</span>` : ''}${skipped ? `, ${skipped} skipped` : ''} · ${(totalMs / 1000).toFixed(1)}s · ${new Date().toLocaleString()}</h1>
 ${body}
 `;
     };

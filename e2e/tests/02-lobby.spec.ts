@@ -96,13 +96,58 @@ test.describe('Lobby', () => {
     await h.snap(ben, 'Ben reconnected');
   });
 
-  test('players cannot leave a game that has not started (server)', async ({ h }) => {
+  test('a guest leaves the lobby: their seat is freed', async ({ h }) => {
+    const { code, seats } = seed({ status: 'waiting', players: [{ name: 'Ava' }, { name: 'Ben' }, { name: 'Cleo' }] });
+    const host = await h.open({ code, seat: seats[0] }, { waitFor: 'lobby' });
+    const ben = await h.open({ code, seat: seats[1] }, { waitFor: 'lobby' });
+    await h.snap(ben, 'Ben in the lobby, with Leave game');
+    await ben.getByTestId('button-leave-lobby').click();
+    await expect(ben.getByTestId('button-create-room')).toBeVisible();
+    await ben.waitForTimeout(500);
+    await expect(ben.getByTestId('button-reconnect')).toHaveCount(0);
+    await h.snap(ben, 'Ben is home, with no reconnect offer');
+    await expect(row(host, seats[1].id)).toHaveCount(0);
+    await expect(host.locator('[data-testid^="player-row-"]')).toHaveCount(2);
+    expect(stored(code).players.map((p: { name: string }) => p.name)).toEqual(['Ava', 'Cleo']);
+    await h.snap(host, 'Ben is gone for the host');
+  });
+
+  test('a player who left can join again as a new player', async ({ h }) => {
     const { code, seats } = seed({ status: 'waiting', players: [{ name: 'Ava' }, { name: 'Ben' }] });
-    const res = await act(code, seats[1], 'leave');
-    expect(res.status).toBe(400);
-    expect(res.json.error).toBe('The game has not started yet.');
-    expect(stored(code).players).toHaveLength(2);
-    await h.note('leave while waiting', res.json);
+    await act(code, seats[1], 'leave');
+    const again = await api(`/rooms/${code}/join`, { body: { playerName: 'Ben' } });
+    expect(again.ok).toBe(true);
+    const old = await view(code, seats[1]);
+    expect(old.error).toBe('That player session is not valid for this game.');
+    await h.note('Old seat after rejoining', old);
+  });
+
+  test('the host leaves: the next player becomes host', async ({ h }) => {
+    const { code, seats } = seed({ status: 'waiting', players: [{ name: 'Ava' }, { name: 'Botley', isBot: true }, { name: 'Ben' }, { name: 'Cleo' }] });
+    const ava = await h.open({ code, seat: seats[0] }, { waitFor: 'lobby' });
+    const ben = await h.open({ code, seat: seats[2] }, { waitFor: 'lobby' });
+    await expect(ben.getByTestId('button-start-game')).toHaveCount(0);
+    await ava.getByTestId('button-leave-lobby').click();
+    await expect(ava.getByTestId('button-create-room')).toBeVisible();
+    await expect(ben.getByTestId('button-start-game')).toBeEnabled();
+    await expect(ben.getByTestId('button-add-bot')).toBeVisible();
+    await expect(row(ben, seats[2].id).getByLabel('Host')).toBeVisible();
+    const room = stored(code);
+    expect(room.hostPlayerId).toBe(seats[2].id);
+    expect(room.players.filter((p: { isHost: boolean }) => p.isHost).map((p: { name: string }) => p.name)).toEqual(['Ben']);
+    await h.snap(ben, 'Ben is host now (not the bot)');
+  });
+
+  test('the last person leaves: the lobby closes', async ({ h }) => {
+    const { code, seats } = seed({ status: 'waiting', players: [{ name: 'Ava' }, { name: 'Botley', isBot: true }] });
+    const ava = await h.open({ code, seat: seats[0] }, { waitFor: 'lobby' });
+    await ava.getByTestId('button-leave-lobby').click();
+    await expect(ava.getByTestId('button-create-room')).toBeVisible();
+    const room = stored(code);
+    expect([room.status, room.players.length]).toEqual(['finished', 0]);
+    const join = await api(`/rooms/${code}/join`, { body: { playerName: 'Ben' } });
+    expect(join.json.error).toBe('This game has ended.');
+    await h.snap(ava, 'Home after closing the lobby');
   });
 
   test('a seventh player is refused', async ({ h }) => {

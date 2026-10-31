@@ -12,7 +12,7 @@
     "build:clean": "pnpm run clean && pnpm run build",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
-    "test:e2e": "playwright test -c e2e"
+    "test:e2e": "node e2e/run.mjs"
   },
   "private": true,
   "packageManager": "pnpm@10.34.6",

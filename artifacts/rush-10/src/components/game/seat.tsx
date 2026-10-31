@@ -24,12 +24,16 @@ export function MeldSpread({ meld, ownerName, canHit, onHit, fresh, incoming }: 
       {canHit && <Plus size={10} strokeWidth={3} />}{meldTitle(meld)}
     </span>
     <span className="relative block" style={{ width, height: Math.round((cardWidth - 4) * 122 / 79 + 4) }}>
-      {/* Cards still flying in from a hit stay hidden (but measurable as the flight target) until they land. */}
-      {laidCardOrder(meld).map((card, i) => <motion.span key={card.id} className={`meld-card absolute top-0 block ${incoming?.has(card.id) ? 'opacity-0' : ''}`} data-meld-card={card.id}
+      {/* Cards still flying in from a hit stay hidden (but measurable as the flight target) until they land.
+          The hiding goes through `animate`: an opacity class would lose to Motion's inline opacity. */}
+      {laidCardOrder(meld).map((card, i) => <motion.span key={card.id} className="meld-card absolute top-0 block" data-meld-card={card.id}
         style={{ left: i * step, zIndex: i + 1 }}
-        initial={fresh && !reduce ? { opacity: 0, y: -26, rotateY: 90, scale: 0.7 } : false}
-        animate={{ opacity: 1, y: 0, rotateY: 0, scale: 1 }}
-        transition={{ delay: 0.25 + i * 0.07, type: 'spring', stiffness: 320, damping: 22 }}>
+        initial={fresh && !reduce && !incoming?.has(card.id) ? { opacity: 0, y: -26, rotateY: 90, scale: 0.7 } : false}
+        animate={{ opacity: incoming?.has(card.id) ? 0 : 1, y: 0, rotateY: 0, scale: 1 }}
+        // A fresh pile flips in, fading rather than springing its opacity so no card snaps on; a landed hit swaps in at once under its flight.
+        transition={fresh
+          ? { delay: 0.25 + i * 0.07, type: 'spring', stiffness: 320, damping: 22, opacity: { delay: 0.25 + i * 0.07, duration: 0.2, ease: 'easeOut' } }
+          : { type: 'spring', stiffness: 320, damping: 22, opacity: { duration: 0 } }}>
         <PlayingCard card={card} width={cardWidth} index={i} className="shadow-[-4px_6px_14px_rgba(0,0,0,.42)]" />
       </motion.span>)}
     </span>
