@@ -75,7 +75,13 @@ type Drag = {
 type Flight = { id: string; nonce: number; from: IncomingDraw['from']; to: { left: number; top: number; rotation: number }; landed?: boolean };
 
 /** Fan geometry derived from the available width and card count. */
-function useFan(width: number, n: number, height: number) {
+/** The height of a hand row of `n` cards: room above for a raised card, the cards, and the arc below. */
+export function handRowHeight(width: number, n: number, viewportHeight: number) {
+  const { ch, sag, topRoom } = fanGeometry(width, n, viewportHeight);
+  return topRoom + ch + sag + 22;
+}
+
+function fanGeometry(width: number, n: number, height: number) {
   const normalWidth = width < 520 ? 72 : width < 900 ? 90 : Math.min(200, Math.round(width / 9.5));
   const cw = Math.min(normalWidth, height <= 650 ? 78 : height <= 750 ? 90 : height <= 850 ? 100 : 200);
   const ch = cardHeight(cw);
@@ -175,7 +181,7 @@ export function OrderedHand({ cards, storageKey, selected, toggleCard, color, in
     window.addEventListener('resize', resize);
     return () => window.removeEventListener('resize', resize);
   }, []);
-  const fan = useFan(width, shown.length, viewportHeight);
+  const fan = fanGeometry(width, shown.length, viewportHeight);
   const fanRef = useRef(fan);
   fanRef.current = fan;
   const fingerprint = JSON.stringify(ids);
@@ -327,7 +333,9 @@ export function OrderedHand({ cards, storageKey, selected, toggleCard, color, in
 
   const { cw, ch, step, padLeft, spread, maxAngle, sag, topRoom } = fan;
   const radius = cw * 0.157;
-  const spring = reduceMotion ? { duration: 0 } : { type: 'spring' as const, stiffness: 520, damping: 38, mass: 0.7 };
+  // Reordering (sorting, a drag, a card arriving) slides each card from rest. The stiff spring that still drives
+  // the hover spread covered most of a long move in its first frame or two, so sorted cards looked like they snapped.
+  const spring = reduceMotion ? { duration: 0 } : { type: 'spring' as const, stiffness: 520, damping: 38, mass: 0.7, layout: { type: 'tween' as const, duration: 0.42, ease: [0.45, 0, 0.2, 1] as const } };
   const draggedCard = drag?.active ? cards.find(card => card.id === drag.id) : undefined;
   const focusId = selected.length === 1 ? selected[0] : null;
   const spreadIndices = drag?.active || flight ? [] : [...new Set([hovered, focusId])]

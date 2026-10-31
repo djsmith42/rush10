@@ -26,8 +26,8 @@ How it works:
 - Tests run with reduced motion except the `@animation` ones, which record GIFs with ffmpeg.
 - Every GIF recording is also checked frame by frame (`lib/motion.ts`). It samples every card on screen
   (hand, flights, piles, laid cards, opponents' fans) on each animation frame and fails the test for:
-  - **teleports**: a card covering 48px+ in one frame, at more than twice the distance of the frames
-    around it (easing ramps; a jump spikes);
+  - **teleports**: a card covering 48px+ in one frame, at more than 3× the speed of the two frames on
+    either side (easing ramps; a jump spikes);
   - **pop-ins / vanishes**: a card going from invisible to fully visible (or back) in one frame with no
     other card there to hand over to;
   - **shadow snaps**: a blurred shadow switching on at full strength in one frame;

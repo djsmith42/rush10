@@ -12,7 +12,7 @@ const TRACKED = [
 ] as const;
 
 type Sample = { id: string; kind: string; x: number; y: number; w: number; h: number; opacity: number; shadow: number; sig: string };
-type Frame = { t: number; items: Sample[] };
+type Frame = { t: number; items: Sample[]; scrollY?: number };
 export type MotionTrace = { frames: Frame[]; loaf: Array<{ start: number; blocking: number; duration: number }>; viewport: { w: number; h: number } };
 
 /** Start sampling every tracked element on every animation frame. */
@@ -66,8 +66,19 @@ export async function startMotion(page: Page) {
         }
       }).observe({ type: 'long-animation-frame', buffered: false });
     } catch { /* Not supported: no blocking data. */ }
+    // Sample after every animation-frame callback has run (Motion's included), not from inside ours: rAF callbacks
+    // run in registration order, so reading positions in our own callback could see Motion's previous frame and then
+    // a double step next time — a fake jump. A posted message runs once this frame's callbacks are done.
+    const channel = new MessageChannel();
+    const pending: number[] = [];
+    channel.port1.onmessage = () => { const t = pending.shift(); if (t !== undefined && !motion.stop) sample(t); };
     const tick = (t: number) => {
       if (motion.stop) return;
+      pending.push(t);
+      channel.port2.postMessage(null);
+      requestAnimationFrame(tick);
+    };
+    const sample = (t: number) => {
       const items: unknown[] = [];
       for (const [selector, kind] of tracked) {
         for (const el of Array.from(document.querySelectorAll(selector))) {
@@ -83,8 +94,7 @@ export async function startMotion(page: Page) {
             opacity: Math.round(opacity * 100) / 100, shadow: opacity > 0.05 ? shadowOf(el) : 0, sig: face.includes('RUSH') || !ink ? '' : `${face}/${getComputedStyle(ink).color}` });
         }
       }
-      motion.frames.push({ t, items });
-      requestAnimationFrame(tick);
+      motion.frames.push({ t, items, scrollY: Math.round(scrollY) });
     };
     requestAnimationFrame(tick);
   }, TRACKED as unknown as Array<[string, string]>);
@@ -107,11 +117,11 @@ export type MotionReport = {
 
 // Frames up to this long (or about twice the run's typical frame) are judged; longer ones are stalls.
 const NORMAL_FRAME_MS = 45;
-// A jump: a single frame that covers this much ground, and far more than the frames either side of it.
+// A jump: a single frame that covers this much ground, at far more than the speed of the frames either side of it.
 // Easing speeds up and slows down gradually; a teleport is a spike.
 const TELEPORT_MIN_PX = 48;
 const TELEPORT_PX_PER_MS = 3;
-const TELEPORT_SPIKE = 2;
+const TELEPORT_SPIKE = 3;
 const SHADOW_POP = 12;
 // A gap this long while cards are moving is a visible hitch. Gaps while nothing moves (a screen swap) are not.
 // Shared CI-class machines drop to ~15–20fps under load, so only real hitches count.
@@ -157,8 +167,11 @@ export function analyzeMotion(trace: MotionTrace): MotionReport {
       // The drag ghost follows the pointer by design; judge the cards, not the mouse.
       if (visible(p) && visible(s) && s.kind !== 'drag') {
         const d = Math.hypot(s.x - p!.x, s.y - p!.y);
-        const around = Math.max(steps[i - 1]?.get(s.id) ?? 0, steps[i + 1]?.get(s.id) ?? 0);
-        if (d > TELEPORT_MIN_PX && d / dt > TELEPORT_PX_PER_MS && d > TELEPORT_SPIKE * around) {
+        // Compare speeds, not distances: a frame that took twice as long rightly covers twice the ground.
+        const speedAt = (j: number) => j > 0 && j < frames.length ? (steps[j].get(s.id) ?? 0) / Math.max(1, frames[j].t - frames[j - 1].t) : 0;
+        // Two frames each side, so uneven frame pacing (a short step beside a long one) isn't read as a jump.
+        const around = Math.max(speedAt(i - 2), speedAt(i - 1), speedAt(i + 1), speedAt(i + 2));
+        if (d > TELEPORT_MIN_PX && d / dt > TELEPORT_PX_PER_MS && d / dt > TELEPORT_SPIKE * around) {
           issues.teleports.push({ at: at(cur.t), what: `${label(s)} jumped ${Math.round(d)}px in ${Math.round(dt)}ms (${Math.round(p!.x)},${Math.round(p!.y)} → ${Math.round(s.x)},${Math.round(s.y)})` });
         }
         if (s.shadow - p!.shadow > SHADOW_POP && p!.shadow < s.shadow * 0.4) {

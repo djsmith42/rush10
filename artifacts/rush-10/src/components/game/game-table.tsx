@@ -4,11 +4,11 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import type { Rush10Card, Rush10Meld, Rush10PlayerAction, Rush10RoomView, Rush10Rules } from '@workspace/api-client-react';
 import { ArrowDown, ArrowRight, CircleHelp, Crown, ListOrdered, LoaderCircle, LogOut, Trophy, X } from 'lucide-react';
 import { PHASE_PARTS, recognizeSelection } from '@/lib/meld-recognition';
-import { OrderedHand, type DropRect, type IncomingDraw } from '@/components/ordered-hand';
+import { OrderedHand, handRowHeight, type DropRect, type IncomingDraw } from '@/components/ordered-hand';
 import { CardBack, PlayingCard, cardColor, cardLabel } from '@/components/cards';
 import { AnimalAvatar } from '@/components/avatars';
 import { PlayerTile, RulesPanel } from '@/components/room-bits';
-import { MeldSpread, OpponentSeat, SeatIdentity } from '@/components/game/seat';
+import { MeldSpread, MeldZone, OpponentSeat, SeatIdentity } from '@/components/game/seat';
 import { EventFlights, isParkedEvent, useTableEvents, type ParkedDrop } from '@/components/game/event-flights';
 import { SkipSplash } from '@/components/game/skip-splash';
 import { ExitConfirm } from '@/components/game/exit-confirm';
@@ -228,6 +228,11 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
   });
 
   const over = isRoundOver || isFinished;
+  // Behind the results the table stays as the round ended: showing your next level there would change the
+  // width of your name block and reflow the laid piles under the overlay. The results show the new level.
+  const playingSelf = useRef(self);
+  if (isPlaying && self) playingSelf.current = self;
+  const tableSelf = over && playingSelf.current?.id === self?.id ? playingSelf.current : undefined;
   const bgRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -297,11 +302,11 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
     {/* Your side of the table */}
     <section className="relative z-20 flex flex-wrap items-end justify-between gap-x-6 gap-y-3 px-4 md:px-8" data-keep-selection>
       {self && <div className="flex items-center gap-3" data-testid="self-identity">
-        <SeatIdentity player={self} active={isMyTurn && isPlaying} align="left" levelTitle={levelTitle(self.phase)} size={80} localPlayer />
+        <SeatIdentity player={tableSelf ?? self} active={isMyTurn && isPlaying} align="left" levelTitle={levelTitle((tableSelf ?? self).phase)} size={80} localPlayer />
       </div>}
-      <div className="flex flex-1 flex-wrap justify-center gap-1" data-meld-zone={selfId}>
+      <MeldZone ownerId={selfId} className="flex-1">
         {myMelds.map(meld => <MeldSpread key={meld.id} meld={meld} ownerName="your" canHit={canHitMeld(meld)} onHit={() => hit(meld)} fresh={freshMelds.has(meld.id)} incoming={incomingHits} />)}
-      </div>
+      </MeldZone>
       {/* The hand's sort buttons share this row, so the hand needs no header row of its own. */}
       <div ref={setSortSlot} className="self-center" data-testid="hand-controls"
         style={!isPlaying && sortSize.current.width ? { minWidth: sortSize.current.width, minHeight: sortSize.current.height } : undefined} />
@@ -325,7 +330,9 @@ export function GameTable({ room, code, selfId, rules, rulesLoading, retryRules,
 
     {/* Your hand: the lower third */}
     <section ref={handSectionRef} className="relative z-30 mb-3 w-full" data-self-hand data-keep-selection aria-label="Your hand"
-      style={room.hand.length === 0 && handHeight.current ? { minHeight: handHeight.current } : undefined}>
+      // With no cards (results after your last card, or a reload then), keep a dealt hand's height, so the next
+      // deal doesn't push the table up.
+      style={room.hand.length === 0 ? { minHeight: Math.max(handHeight.current, handRowHeight(window.innerWidth, 10, window.innerHeight)) } : undefined}>
       {room.hand.length === 0 ? <p className="py-14 text-center text-sm text-[#94A3B8]">{isPlaying ? 'Your hand is empty.' : 'Your hand will appear here when the round begins.'}</p> : (
         <OrderedHand key={`${code}-${selfId}-${room.roundNumber}`} storageKey={`rush10-hand-${code}-${selfId}`}
           deal={isPlaying ? [...(room.events ?? [])].reverse().find(event => event.kind === 'deal') : undefined}

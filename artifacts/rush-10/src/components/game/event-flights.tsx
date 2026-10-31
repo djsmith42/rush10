@@ -7,9 +7,9 @@ import { CardBack, PlayingCard } from '@/components/cards';
 const STALE_MS = 8000;
 const SPRITE_W = 60;
 const SEAT_SCALE = 0.55;
-const EASE = [0.22, 1, 0.36, 1] as const;
-// Quick but not explosive off the mark: EASE starts at 4.5× the average speed, which reads as a jump.
-const FLIGHT_EASE = [0.33, 0.85, 0.4, 1] as const;
+// Flights leave from rest and settle softly. A curve that starts at full speed (the old [.22, 1, .36, 1] began at 4.5× the average)
+// turns the first late frame after a flight mounts into a visible jump off the starting spot.
+const FLIGHT_EASE = [0.45, 0, 0.2, 1] as const;
 
 /**
  * Consumes unseen public table events. The first event list seen is hydration (never animated);
@@ -154,14 +154,14 @@ function Sprite({ event, selfId, parked, onDone }: { event: Rush10GameEvent; sel
         rotate: [startRotate, 8 * toward, 0],
         opacity: isLay ? [startOpacity, 1, 1, 0] : [startOpacity, 1, 1],
       }}
-      // One ease across the whole sideways move, and an arc that slows into its top and speeds out of it, so the
-      // card's speed never jumps: easing each half separately made it stall at the top and then lurch.
+      // One ease across the whole sideways move, and an arc that eases into and out of its top, so the card's speed
+      // never jumps: a fast-starting ease on each half made it stall at the top and then lurch.
       transition={dropped
-        ? { duration: isLay ? 0.6 : 0.42, ease: EASE, ...(isLay ? { opacity: { duration: 0.6, times: [0, 0.7, 1] } } : {}) }
+        ? { duration: isLay ? 0.6 : 0.42, ease: FLIGHT_EASE, ...(isLay ? { opacity: { duration: 0.6, times: [0, 0.7, 1] } } : {}) }
         : (() => {
           const duration = isLay ? 0.8 : 0.66;
-          const arc = { duration, times: [0, 0.48, 1], ease: ['easeOut', 'easeIn'] as const };
-          return { duration, x: { duration, ease: FLIGHT_EASE }, y: arc, scale: arc, rotate: { ...arc, ease: ['easeOut', 'easeInOut'] as const },
+          const arc = { duration, times: [0, 0.48, 1], ease: ['easeInOut', 'easeInOut'] as const };
+          return { duration, x: { duration, ease: FLIGHT_EASE }, y: arc, scale: arc, rotate: arc,
             opacity: isLay ? { duration, times: [0, 0.3, 0.75, 1] } : { duration, times: [0, 0.3, 1] } };
         })()}
       onAnimationComplete={() => doneRef.current()}>
@@ -192,7 +192,7 @@ function LaidCardsFlight({ cards, to, onDone }: { cards: ParkedPose[]; to: Box; 
       style={{ width: SPRITE_W, height: h }}
       initial={{ x: pose.x - SPRITE_W / 2, y: pose.y - h / 2, rotate: pose.rotate, scale: pose.width / SPRITE_W }}
       animate={{ x: target.x - SPRITE_W / 2, y: target.y - h / 2, rotate: 0, scale }}
-      transition={{ duration: 0.6, delay: i * 0.03, ease: EASE }}
+      transition={{ duration: 0.6, delay: i * 0.03, ease: FLIGHT_EASE }}
       onAnimationComplete={i === cards.length - 1 ? onDone : undefined}>
       <PlayingCard card={pose.card} width={SPRITE_W} className="shadow-[0_18px_36px_rgba(0,0,0,.55)]" />
     </motion.div>;

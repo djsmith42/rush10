@@ -295,6 +295,8 @@ test.describe('Motion quality @animation', () => {
 
   test('the motion checks catch a teleport, a pop-in, a snapped shadow and a hitch', async ({ h }) => {
     const page = await h.open();
+    // A blank page: the home page's blurred backdrop renders slowly here, and slow frames are skipped by design.
+    await page.setContent('<body style="margin:0;background:#0b1120"></body>');
     await page.evaluate(() => {
       const card = (name: string, x: number, y: number, extra = '') => {
         const el = document.createElement('div');
@@ -304,24 +306,28 @@ test.describe('Motion quality @animation', () => {
       };
       card('smooth', 40, 60);
       card('jumper', 40, 200);
+      card('jumper2', 40, 320);
       card('popper', 700, 400, 'opacity:0');
       card('popper2', 820, 400, 'opacity:0');
       card('shadow', 500, 60);
+      card('shadow2', 600, 60);
     });
     await startMotion(page);
     await page.evaluate(() => new Promise<void>(resolve => {
       const el = (name: string) => document.querySelector<HTMLElement>(`[data-meld-card="${name}"]`)!;
-      const [smooth, jumper, popper, popper2, shadow] = ['smooth', 'jumper', 'popper', 'popper2', 'shadow'].map(el);
+      const [smooth, jumper, jumper2, popper, popper2, shadow, shadow2] = ['smooth', 'jumper', 'jumper2', 'popper', 'popper2', 'shadow', 'shadow2'].map(el);
       const start = performance.now();
       let stalled = false;
       const step = (now: number) => {
         const t = now - start;
         smooth.style.transform = `translate(${40 + Math.min(1, t / 900) * 400}px,60px)`;
         jumper.style.transform = `translate(${t < 300 ? 40 + t / 10 : 400}px,200px)`;
+        jumper2.style.transform = `translate(${t < 800 ? 40 + t / 20 : 420}px,320px)`;
         // Two pops at different moments, so one landing on a frame the checks skip as slow can't hide both.
         if (t > 400) popper.style.opacity = '1';
         if (t > 850) popper2.style.opacity = '1';
         if (t > 200) shadow.style.boxShadow = '0 18px 34px rgba(0,0,0,.5)';
+        if (t > 750) shadow2.style.boxShadow = '0 18px 34px rgba(0,0,0,.5)';
         if (t > 550 && !stalled) { stalled = true; const until = performance.now() + 320; while (performance.now() < until) { /* hitch */ } }
         if (t < 1100) requestAnimationFrame(step); else resolve();
       };
@@ -330,9 +336,9 @@ test.describe('Motion quality @animation', () => {
     const report = analyzeMotion(await stopMotion(page));
     await h.note('Detector report', report);
     const ids = (list: Array<{ what: string }>) => list.map(issue => issue.what.split(' ')[0]);
-    expect(ids(report.teleports)).toContain('laid:jumper');
+    expect(ids(report.teleports).filter(id => id.startsWith('laid:jumper')).length).toBeGreaterThan(0);
     expect(ids(report.popIns).filter(id => id.startsWith('laid:popper')).length).toBeGreaterThan(0);
-    expect(ids(report.shadowPops)).toContain('laid:shadow');
+    expect(ids(report.shadowPops).filter(id => id.startsWith('laid:shadow')).length).toBeGreaterThan(0);
     expect(report.stalls.length).toBeGreaterThan(0);
     for (const list of [report.teleports, report.popIns, report.vanishes, report.shadowPops]) expect(ids(list)).not.toContain('laid:smooth');
   });

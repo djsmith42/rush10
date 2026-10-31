@@ -323,9 +323,14 @@ export async function grabPoint(locator: ReturnType<Page['locator']>) {
 
 /** Drag with real pointer moves from a hand card to a target element. */
 export async function dragTo(page: Page, from: ReturnType<Page['locator']>, to: ReturnType<Page['locator']>, { release = true } = {}) {
+  // Hovering a hand card spreads its neighbours (animated, outside reduced motion), so aim, hover, let the spread
+  // settle, then aim again before pressing.
+  const first = await grabPoint(from);
+  await page.mouse.move(first.x, first.y);
+  await page.waitForTimeout(250);
   const a = await grabPoint(from);
-  const b = (await to.boundingBox())!;
   await page.mouse.move(a.x, a.y);
+  const b = (await to.boundingBox())!;
   await page.mouse.down();
   await page.mouse.move(a.x + 12, a.y - 12, { steps: 4 });
   await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 14 });

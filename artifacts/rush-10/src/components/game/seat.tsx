@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import type { Rush10Meld, Rush10Player } from '@workspace/api-client-react';
 import { Bot, Check, Crown, Plus } from 'lucide-react';
@@ -15,8 +16,15 @@ export function meldTitle(meld: Rush10Meld) {
 export function MeldSpread({ meld, ownerName, canHit, onHit, fresh, incoming }: { meld: Rush10Meld; ownerName: string; canHit: boolean; onHit: () => void; fresh: boolean; incoming?: Set<string> }) {
   const cardWidth = 62.5;
   const reduce = useReducedMotion();
-  const step = Math.max(18, Math.min(cardWidth * 0.5, 150 / Math.max(1, meld.cards.length - 1)));
-  const width = cardWidth + step * Math.max(0, meld.cards.length - 1);
+  const gaps = Math.max(1, meld.cards.length - 1);
+  const natural = cardWidth + Math.max(18, Math.min(cardWidth * 0.5, 150 / gaps)) * (meld.cards.length - 1);
+  // A pile keeps the width it was first shown at and squeezes its cards closer as more are added, widening only
+  // once they would sit tighter than 18px. A pile that grew pushed the piles beside it onto a new row and the whole
+  // table jumped.
+  const shownWidth = useRef(natural);
+  const width = Math.max(shownWidth.current, cardWidth + 18 * (meld.cards.length - 1));
+  shownWidth.current = width;
+  const step = meld.cards.length > 1 ? Math.min(cardWidth * 0.5, 150 / gaps, (width - cardWidth) / gaps) : 0;
   return <button type="button" onClick={onHit} disabled={!canHit} data-testid={`button-hit-${meld.id}`} data-drop-meld={meld.id} data-keep-selection
     aria-label={`Add selected cards to ${ownerName}'s ${meldTitle(meld)}${canHit ? '' : ' (select matching cards on your turn)'}`}
     className={`meld-spread group relative flex flex-col items-center gap-1 rounded-xl px-1.5 pb-1.5 pt-1 ${canHit ? 'can-hit' : ''}`}>
@@ -27,9 +35,10 @@ export function MeldSpread({ meld, ownerName, canHit, onHit, fresh, incoming }: 
       {/* Cards still flying in from a hit stay hidden (but measurable as the flight target) until they land.
           The hiding goes through `animate`: an opacity class would lose to Motion's inline opacity. */}
       {laidCardOrder(meld).map((card, i) => <motion.span key={card.id} className="meld-card absolute top-0 block" data-meld-card={card.id}
-        style={{ left: i * step, zIndex: i + 1 }}
-        initial={fresh && !reduce && !incoming?.has(card.id) ? { opacity: 0, y: -26, rotateY: 90, scale: 0.7 } : false}
-        animate={{ opacity: incoming?.has(card.id) ? 0 : 1, y: 0, rotateY: 0, scale: 1 }}
+        // Placed with x so cards slide when the pile squeezes up or a card lands between them.
+        style={{ left: 0, zIndex: i + 1 }}
+        initial={fresh && !reduce && !incoming?.has(card.id) ? { x: i * step, opacity: 0, y: -26, rotateY: 90, scale: 0.7 } : false}
+        animate={{ x: i * step, opacity: incoming?.has(card.id) ? 0 : 1, y: 0, rotateY: 0, scale: 1 }}
         // A fresh pile flips in, fading rather than springing its opacity so no card snaps on; a landed hit swaps in at once under its flight.
         transition={fresh
           ? { delay: 0.25 + i * 0.07, type: 'spring', stiffness: 320, damping: 22, opacity: { delay: 0.25 + i * 0.07, duration: 0.2, ease: 'easeOut' } }
@@ -58,6 +67,30 @@ export function SeatIdentity({ player, active, align = 'center', levelTitle, siz
   </div>;
 }
 
+/** Where a player's laid piles sit. Its height eases to fit them, so when piles arrive or wrap onto another row
+ *  the table glides instead of jumping: the table centres its middle in whatever height the rows leave over. */
+export function MeldZone({ ownerId, className = '', innerClassName = '', children }: { ownerId?: string; className?: string; innerClassName?: string; children: ReactNode }) {
+  const reduce = useReducedMotion();
+  const inner = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState<number | 'auto'>('auto');
+  useLayoutEffect(() => {
+    const el = inner.current;
+    if (!el) return;
+    const measure = () => setHeight(el.offsetHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return <motion.div className={className} initial={false} animate={{ height }}
+    transition={reduce ? { duration: 0 } : { type: 'tween', duration: 0.32, ease: [0.45, 0, 0.2, 1] }}>
+    <div ref={inner} className={`flex flex-wrap justify-center gap-1 ${innerClassName}`} data-meld-zone={ownerId}>{children}</div>
+  </motion.div>;
+}
+
+/** Wide enough for a full fan: backs 30px wide, at most 12px apart, over 120px. */
+const FAN_BOX = 150;
+
 /** Opponent: identity, a face-down fan sized to their hand count, and their laid melds. */
 export function OpponentSeat({ player, active, melds, canHit, onHit, freshMelds, incomingHits }: { player: Rush10Player; active: boolean; melds: Rush10Meld[]; canHit: (meld: Rush10Meld) => boolean; onHit: (meld: Rush10Meld) => void; freshMelds: Set<string>; incomingHits?: Set<string> }) {
   const reduce = useReducedMotion();
@@ -70,19 +103,22 @@ export function OpponentSeat({ player, active, melds, canHit, onHit, freshMelds,
   // line before the row has to scroll.
   return <div className="flex min-w-[120px] flex-col items-center gap-2 px-1 md:px-2" data-testid={`seat-${player.id}`}>
     <SeatIdentity player={player} active={active} size={36} />
-    <div className="relative" style={{ width: Math.max(fanW, 40), height: 58 }} data-seat-hand={player.id} aria-label={`${player.name} holds ${n} card${n === 1 ? '' : 's'}`} role="img">
+    {/* A fixed-width box (the widest fan), with the fan centred in it: a box that grew with the hand re-centred the
+        whole seat whenever a card was dealt or drawn, and every card in it jumped. */}
+    <div className="relative" style={{ width: FAN_BOX, height: 58 }} data-seat-hand={player.id} aria-label={`${player.name} holds ${n} card${n === 1 ? '' : 's'}`} role="img">
       {Array.from({ length: n }, (_, i) => {
         const t = n > 1 ? (i / (n - 1)) * 2 - 1 : 0;
-        return <motion.span key={i} className="absolute top-1 block" style={{ left: i * step, transformOrigin: '50% 140%' }}
-          initial={false} animate={{ rotate: t * maxAngle, y: t * t * 6 + (active && !reduce ? -2 : 0) }} transition={{ type: 'spring', stiffness: 260, damping: 24 }}>
+        // Positioned with x, not left, so the fan re-spreads smoothly when the count changes instead of jumping.
+        return <motion.span key={i} className="absolute left-0 top-1 block" style={{ transformOrigin: '50% 140%' }}
+          initial={false} animate={{ x: (FAN_BOX - fanW) / 2 + i * step, rotate: t * maxAngle, y: t * t * 6 + (active && !reduce ? -2 : 0) }} transition={{ type: 'spring', stiffness: 260, damping: 24 }}>
           <CardBack width={backW} className="shadow-[-2px_3px_8px_rgba(0,0,0,.45)]" />
         </motion.span>;
       })}
       {n === 0 && <span className="absolute inset-0 flex items-center justify-center font-mono text-[9px] uppercase tracking-widest text-[#A3E635]">Out</span>}
       <span className="absolute -bottom-1 -right-4 rounded-full bg-[#0F172A] px-1.5 py-0.5 font-mono text-[9px] text-[#CBD5E1] ring-1 ring-white/10">{n}</span>
     </div>
-    <div className="flex min-h-[8px] flex-wrap justify-center gap-1" data-meld-zone={player.id}>
+    <MeldZone ownerId={player.id} innerClassName="min-h-[8px]">
       {melds.map(meld => <MeldSpread key={meld.id} meld={meld} ownerName={player.name} canHit={canHit(meld)} onHit={() => onHit(meld)} fresh={freshMelds.has(meld.id)} incoming={incomingHits} />)}
-    </div>
+    </MeldZone>
   </div>;
 }
