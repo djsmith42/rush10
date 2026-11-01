@@ -48,11 +48,13 @@ try {
   await start();
   const host = await post("/rooms", { playerName: "Storage host" }, 201);
   const guest = await post(`/rooms/${host.roomCode}/join`, { playerName: "Storage guest" });
+  // Pick an avatar nobody holds yet; both players start with random ones.
+  const avatar = ["owl", "panda"].find(choice => guest.room.players.every(player => player.avatar !== choice));
   const avatarView = await post(`/rooms/${host.roomCode}/action`, {
-    playerToken: guest.playerToken, action: "set-avatar", avatar: "owl",
+    playerToken: guest.playerToken, action: "set-avatar", avatar,
   });
-  assert.equal(avatarView.players.find(player => player.id === guest.playerId).avatar, "owl");
-  assert.equal((await view(host)).players.find(player => player.id === guest.playerId).avatar, "owl",
+  assert.equal(avatarView.players.find(player => player.id === guest.playerId).avatar, avatar);
+  assert.equal((await view(host)).players.find(player => player.id === guest.playerId).avatar, avatar,
     "Avatar choice must be visible to the other player");
   await post(`/rooms/${host.roomCode}/action`, {
     playerToken: guest.playerToken, action: "set-avatar", avatar: "invalid",

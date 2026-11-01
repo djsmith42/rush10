@@ -407,10 +407,16 @@ function finishRound(room: GameRoom, finisher: GamePlayer, allCompleted = false)
   }
 }
 
+/** Only GameError text is written for players; anything else could reveal the request schema or internals. */
 function handleError(res: Parameters<Parameters<IRouter["get"]>[1]>[1], error: unknown) {
-  const status = error instanceof GameError ? error.status : 400;
-  const message = error instanceof Error ? error.message : "The game action could not be completed.";
-  res.status(status).json({ error: message });
+  if (error instanceof GameError) {
+    res.status(error.status).json({ error: error.message });
+  } else if (error instanceof Error && error.name === "ZodError") {
+    res.status(400).json({ error: "That request was not valid." });
+  } else {
+    logger.error({ err: error }, "Game request failed");
+    res.status(500).json({ error: "The game action could not be completed." });
+  }
 }
 
 /** Leaving ends the game for everyone; the round in progress is not scored. */

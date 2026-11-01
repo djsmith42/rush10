@@ -22,7 +22,7 @@ export const HealthCheckResponse = zod.object({
  */
 export const GetRush10RulesResponse = zod.object({
   "phases": zod.array(zod.object({
-  "number": zod.number().int(),
+  "number": zod.int(),
   "title": zod.string(),
   "description": zod.string()
 })),
@@ -56,7 +56,7 @@ export const CreateRush10RoomResponse = zod.object({
   "card": zod.union([zod.object({
   "id": zod.string(),
   "type": zod.enum(['number', 'wild', 'skip']),
-  "value": zod.number().int().nullable(),
+  "value": zod.int().nullable(),
   "color": zod.string().nullable()
 }),zod.null()])
 })).optional(),
@@ -66,9 +66,9 @@ export const CreateRush10RoomResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "avatar": zod.enum(['fox', 'cat', 'bear', 'rabbit', 'owl', 'panda', 'frog', 'penguin']).optional(),
-  "phase": zod.number().int(),
-  "score": zod.number().int(),
-  "handCount": zod.number().int(),
+  "phase": zod.int(),
+  "score": zod.int(),
+  "handCount": zod.int(),
   "isHost": zod.boolean(),
   "isBot": zod.boolean().describe('A bot run by the server.'),
   "botLevel": zod.enum(['easy', 'medium', 'hard']).optional(),
@@ -77,18 +77,18 @@ export const CreateRush10RoomResponse = zod.object({
   "hostPlayerId": zod.string(),
   "currentPlayerId": zod.string().nullable(),
   "turnState": zod.enum(['draw', 'discard', 'waiting']),
-  "currentPhase": zod.number().int(),
-  "drawPileCount": zod.number().int(),
+  "currentPhase": zod.int(),
+  "drawPileCount": zod.int(),
   "discardTop": zod.union([zod.object({
   "id": zod.string(),
   "type": zod.enum(['number', 'wild', 'skip']),
-  "value": zod.number().int().nullable(),
+  "value": zod.int().nullable(),
   "color": zod.string().nullable()
 }),zod.null()]),
   "hand": zod.array(zod.object({
   "id": zod.string(),
   "type": zod.enum(['number', 'wild', 'skip']),
-  "value": zod.number().int().nullable(),
+  "value": zod.int().nullable(),
   "color": zod.string().nullable()
 })),
   "melds": zod.array(zod.object({
@@ -99,15 +99,15 @@ export const CreateRush10RoomResponse = zod.object({
   "cards": zod.array(zod.object({
   "id": zod.string(),
   "type": zod.enum(['number', 'wild', 'skip']),
-  "value": zod.number().int().nullable(),
+  "value": zod.int().nullable(),
   "color": zod.string().nullable()
 })),
-  "declaredValue": zod.number().int().nullable(),
+  "declaredValue": zod.int().nullable(),
   "declaredColor": zod.string().nullable(),
-  "low": zod.number().int().nullable(),
-  "high": zod.number().int().nullable()
+  "low": zod.int().nullable(),
+  "high": zod.int().nullable()
 })),
-  "roundNumber": zod.number().int(),
+  "roundNumber": zod.int(),
   "message": zod.string(),
   "winnerId": zod.string().nullable(),
   "endReason": zod.union([zod.enum(['level-10', 'player-left']),zod.null()]).describe('Why a finished game ended; null until it does.'),
@@ -127,7 +127,7 @@ export const createRush10TestRoomBodyPlayerCountMax = 6;
 
 export const CreateRush10TestRoomBody = zod.object({
   "scenario": zod.enum(['play', 'level-10', 'player-left']),
-  "playerCount": zod.number().int().min(createRush10TestRoomBodyPlayerCountMin).max(createRush10TestRoomBodyPlayerCountMax)
+  "playerCount": zod.int().min(createRush10TestRoomBodyPlayerCountMin).max(createRush10TestRoomBodyPlayerCountMax)
 })
 
 export const CreateRush10TestRoomResponse = zod.object({
@@ -169,7 +169,7 @@ export const JoinRush10RoomResponse = zod.object({
   "card": zod.union([zod.object({
   "id": zod.string(),
   "type": zod.enum(['number', 'wild', 'skip']),
-  "value": zod.number().int().nullable(),
+  "value": zod.int().nullable(),
   "color": zod.string().nullable()
 }),zod.null()])
 })).optional(),
@@ -179,9 +179,9 @@ export const JoinRush10RoomResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "avatar": zod.enum(['fox', 'cat', 'bear', 'rabbit', 'owl', 'panda', 'frog', 'penguin']).optional(),
-  "phase": zod.number().int(),
-  "score": zod.number().int(),
-  "handCount": zod.number().int(),
+  "phase": zod.int(),
+  "score": zod.int(),
+  "handCount": zod.int(),
   "isHost": zod.boolean(),
   "isBot": zod.boolean().describe('A bot run by the server.'),
   "botLevel": zod.enum(['easy', 'medium', 'hard']).optional(),
@@ -190,18 +190,18 @@ export const JoinRush10RoomResponse = zod.object({
   "hostPlayerId": zod.string(),
   "currentPlayerId": zod.string().nullable(),
   "turnState": zod.enum(['draw', 'discard', 'waiting']),
-  "currentPhase": zod.number().int(),
-  "drawPileCount": zod.number().int(),
+  "currentPhase": zod.int(),
+  "drawPileCount": zod.int(),
   "discardTop": zod.union([zod.object({
   "id": zod.string(),
   "type": zod.enum(['number', 'wild', 'skip']),
-  "value": zod.number().int().nullable(),
+  "value": zod.int().nullable(),
   "color": zod.string().nullable()
 }),zod.null()]),
   "hand": zod.array(zod.object({
   "id": zod.string(),
   "type": zod.enum(['number', 'wild', 'skip']),
-  "value": zod.number().int().nullable(),
+  "value": zod.int().nullable(),
   "color": zod.string().nullable()
 })),
   "melds": zod.array(zod.object({
@@ -212,15 +212,15 @@ export const JoinRush10RoomResponse = zod.object({
   "cards": zod.array(zod.object({
   "id": zod.string(),
   "type": zod.enum(['number', 'wild', 'skip']),
-  "value": zod.number().int().nullable(),
+  "value": zod.int().nullable(),
   "color": zod.string().nullable()
 })),
-  "declaredValue": zod.number().int().nullable(),
+  "declaredValue": zod.int().nullable(),
   "declaredColor": zod.string().nullable(),
-  "low": zod.number().int().nullable(),
-  "high": zod.number().int().nullable()
+  "low": zod.int().nullable(),
+  "high": zod.int().nullable()
 })),
-  "roundNumber": zod.number().int(),
+  "roundNumber": zod.int(),
   "message": zod.string(),
   "winnerId": zod.string().nullable(),
   "endReason": zod.union([zod.enum(['level-10', 'player-left']),zod.null()]).describe('Why a finished game ended; null until it does.'),
@@ -261,7 +261,7 @@ export const GetRush10RoomResponse = zod.object({
   "card": zod.union([zod.object({
   "id": zod.string(),
   "type": zod.enum(['number', 'wild', 'skip']),
-  "value": zod.number().int().nullable(),
+  "value": zod.int().nullable(),
   "color": zod.string().nullable()
 }),zod.null()])
 })).optional(),
@@ -271,9 +271,9 @@ export const GetRush10RoomResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "avatar": zod.enum(['fox', 'cat', 'bear', 'rabbit', 'owl', 'panda', 'frog', 'penguin']).optional(),
-  "phase": zod.number().int(),
-  "score": zod.number().int(),
-  "handCount": zod.number().int(),
+  "phase": zod.int(),
+  "score": zod.int(),
+  "handCount": zod.int(),
   "isHost": zod.boolean(),
   "isBot": zod.boolean().describe('A bot run by the server.'),
   "botLevel": zod.enum(['easy', 'medium', 'hard']).optional(),
@@ -282,18 +282,18 @@ export const GetRush10RoomResponse = zod.object({
   "hostPlayerId": zod.string(),
   "currentPlayerId": zod.string().nullable(),
   "turnState": zod.enum(['draw', 'discard', 'waiting']),
-  "currentPhase": zod.number().int(),
-  "drawPileCount": zod.number().int(),
+  "currentPhase": zod.int(),
+  "drawPileCount": zod.int(),
   "discardTop": zod.union([zod.object({
   "id": zod.string(),
   "type": zod.enum(['number', 'wild', 'skip']),
-  "value": zod.number().int().nullable(),
+  "value": zod.int().nullable(),
   "color": zod.string().nullable()
 }),zod.null()]),
   "hand": zod.array(zod.object({
   "id": zod.string(),
   "type": zod.enum(['number', 'wild', 'skip']),
-  "value": zod.number().int().nullable(),
+  "value": zod.int().nullable(),
   "color": zod.string().nullable()
 })),
   "melds": zod.array(zod.object({
@@ -304,15 +304,15 @@ export const GetRush10RoomResponse = zod.object({
   "cards": zod.array(zod.object({
   "id": zod.string(),
   "type": zod.enum(['number', 'wild', 'skip']),
-  "value": zod.number().int().nullable(),
+  "value": zod.int().nullable(),
   "color": zod.string().nullable()
 })),
-  "declaredValue": zod.number().int().nullable(),
+  "declaredValue": zod.int().nullable(),
   "declaredColor": zod.string().nullable(),
-  "low": zod.number().int().nullable(),
-  "high": zod.number().int().nullable()
+  "low": zod.int().nullable(),
+  "high": zod.int().nullable()
 })),
-  "roundNumber": zod.number().int(),
+  "roundNumber": zod.int(),
   "message": zod.string(),
   "winnerId": zod.string().nullable(),
   "endReason": zod.union([zod.enum(['level-10', 'player-left']),zod.null()]).describe('Why a finished game ended; null until it does.'),
@@ -341,7 +341,7 @@ export const StartRush10GameResponse = zod.object({
   "card": zod.union([zod.object({
   "id": zod.string(),
   "type": zod.enum(['number', 'wild', 'skip']),
-  "value": zod.number().int().nullable(),
+  "value": zod.int().nullable(),
   "color": zod.string().nullable()
 }),zod.null()])
 })).optional(),
@@ -351,9 +351,9 @@ export const StartRush10GameResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "avatar": zod.enum(['fox', 'cat', 'bear', 'rabbit', 'owl', 'panda', 'frog', 'penguin']).optional(),
-  "phase": zod.number().int(),
-  "score": zod.number().int(),
-  "handCount": zod.number().int(),
+  "phase": zod.int(),
+  "score": zod.int(),
+  "handCount": zod.int(),
   "isHost": zod.boolean(),
   "isBot": zod.boolean().describe('A bot run by the server.'),
   "botLevel": zod.enum(['easy', 'medium', 'hard']).optional(),
@@ -362,18 +362,18 @@ export const StartRush10GameResponse = zod.object({
   "hostPlayerId": zod.string(),
   "currentPlayerId": zod.string().nullable(),
   "turnState": zod.enum(['draw', 'discard', 'waiting']),
-  "currentPhase": zod.number().int(),
-  "drawPileCount": zod.number().int(),
+  "currentPhase": zod.int(),
+  "drawPileCount": zod.int(),
   "discardTop": zod.union([zod.object({
   "id": zod.string(),
   "type": zod.enum(['number', 'wild', 'skip']),
-  "value": zod.number().int().nullable(),
+  "value": zod.int().nullable(),
   "color": zod.string().nullable()
 }),zod.null()]),
   "hand": zod.array(zod.object({
   "id": zod.string(),
   "type": zod.enum(['number', 'wild', 'skip']),
-  "value": zod.number().int().nullable(),
+  "value": zod.int().nullable(),
   "color": zod.string().nullable()
 })),
   "melds": zod.array(zod.object({
@@ -384,15 +384,15 @@ export const StartRush10GameResponse = zod.object({
   "cards": zod.array(zod.object({
   "id": zod.string(),
   "type": zod.enum(['number', 'wild', 'skip']),
-  "value": zod.number().int().nullable(),
+  "value": zod.int().nullable(),
   "color": zod.string().nullable()
 })),
-  "declaredValue": zod.number().int().nullable(),
+  "declaredValue": zod.int().nullable(),
   "declaredColor": zod.string().nullable(),
-  "low": zod.number().int().nullable(),
-  "high": zod.number().int().nullable()
+  "low": zod.int().nullable(),
+  "high": zod.int().nullable()
 })),
-  "roundNumber": zod.number().int(),
+  "roundNumber": zod.int(),
   "message": zod.string(),
   "winnerId": zod.string().nullable(),
   "endReason": zod.union([zod.enum(['level-10', 'player-left']),zod.null()]).describe('Why a finished game ended; null until it does.'),
@@ -420,13 +420,13 @@ export const ActInRush10GameBody = zod.object({
   "melds": zod.array(zod.object({
   "type": zod.enum(['group', 'sequence', 'color']),
   "cardIds": zod.array(zod.string()),
-  "declaredValue": zod.number().int().nullish(),
+  "declaredValue": zod.int().nullish(),
   "declaredColor": zod.string().nullish()
 })).optional(),
   "meldId": zod.string().optional(),
   "targetPlayerId": zod.string().optional(),
   "botLevel": zod.enum(['easy', 'medium', 'hard']).optional(),
-  "declaredValue": zod.number().int().nullish(),
+  "declaredValue": zod.int().nullish(),
   "declaredColor": zod.string().nullish()
 })
 
@@ -440,7 +440,7 @@ export const ActInRush10GameResponse = zod.object({
   "card": zod.union([zod.object({
   "id": zod.string(),
   "type": zod.enum(['number', 'wild', 'skip']),
-  "value": zod.number().int().nullable(),
+  "value": zod.int().nullable(),
   "color": zod.string().nullable()
 }),zod.null()])
 })).optional(),
@@ -450,9 +450,9 @@ export const ActInRush10GameResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "avatar": zod.enum(['fox', 'cat', 'bear', 'rabbit', 'owl', 'panda', 'frog', 'penguin']).optional(),
-  "phase": zod.number().int(),
-  "score": zod.number().int(),
-  "handCount": zod.number().int(),
+  "phase": zod.int(),
+  "score": zod.int(),
+  "handCount": zod.int(),
   "isHost": zod.boolean(),
   "isBot": zod.boolean().describe('A bot run by the server.'),
   "botLevel": zod.enum(['easy', 'medium', 'hard']).optional(),
@@ -461,18 +461,18 @@ export const ActInRush10GameResponse = zod.object({
   "hostPlayerId": zod.string(),
   "currentPlayerId": zod.string().nullable(),
   "turnState": zod.enum(['draw', 'discard', 'waiting']),
-  "currentPhase": zod.number().int(),
-  "drawPileCount": zod.number().int(),
+  "currentPhase": zod.int(),
+  "drawPileCount": zod.int(),
   "discardTop": zod.union([zod.object({
   "id": zod.string(),
   "type": zod.enum(['number', 'wild', 'skip']),
-  "value": zod.number().int().nullable(),
+  "value": zod.int().nullable(),
   "color": zod.string().nullable()
 }),zod.null()]),
   "hand": zod.array(zod.object({
   "id": zod.string(),
   "type": zod.enum(['number', 'wild', 'skip']),
-  "value": zod.number().int().nullable(),
+  "value": zod.int().nullable(),
   "color": zod.string().nullable()
 })),
   "melds": zod.array(zod.object({
@@ -483,15 +483,15 @@ export const ActInRush10GameResponse = zod.object({
   "cards": zod.array(zod.object({
   "id": zod.string(),
   "type": zod.enum(['number', 'wild', 'skip']),
-  "value": zod.number().int().nullable(),
+  "value": zod.int().nullable(),
   "color": zod.string().nullable()
 })),
-  "declaredValue": zod.number().int().nullable(),
+  "declaredValue": zod.int().nullable(),
   "declaredColor": zod.string().nullable(),
-  "low": zod.number().int().nullable(),
-  "high": zod.number().int().nullable()
+  "low": zod.int().nullable(),
+  "high": zod.int().nullable()
 })),
-  "roundNumber": zod.number().int(),
+  "roundNumber": zod.int(),
   "message": zod.string(),
   "winnerId": zod.string().nullable(),
   "endReason": zod.union([zod.enum(['level-10', 'player-left']),zod.null()]).describe('Why a finished game ended; null until it does.'),

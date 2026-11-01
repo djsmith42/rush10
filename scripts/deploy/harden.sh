@@ -5,7 +5,7 @@
 #  1. Run the API as a dedicated `rush10` account (no login, no sudo) in a systemd sandbox.
 #  2. Apache: hide the version (ServerTokens Prod, ServerSignature Off), and cap request
 #     bodies (16 KB, via LimitRequestBody plus a Content-Length rewrite) and backend wait
-#     time (10s) on /rush10/api.
+#     time (10s) on /rush10/api, and send security headers (CSP, nosniff) on /rush10.
 set -eu
 cd "$(dirname "$0")"
 [ "$(id -u)" = 0 ] || { echo "Run as root: sudo sh $0" >&2; exit 1; }
@@ -51,6 +51,14 @@ fi
 # oversized declared bodies before they reach Node (chunked bodies hit Express's 8 KB cap).
 if ! grep -q 'rush10-body-limit' "$VHOST"; then
   sed -i -E '/LimitRequestBody 16384/{n;s#^(\s*)</Location>$#&\n\1\# rush10-body-limit: LimitRequestBody does not apply to streamed proxy bodies.\n\1RewriteCond %{REQUEST_URI} ^/rush10/api/\n\1RewriteCond expr "%{HTTP:Content-Length} -gt 16384"\n\1RewriteRule ^ - [R=413,L]#}' "$VHOST"
+fi
+
+# Security headers for the page and API, copied from apache-rush10.conf (the block after </Directory>).
+if ! grep -q 'rush10-headers' "$VHOST"; then
+  a2enmod -q headers
+  HEADERS=$(sed -n '/rush10-headers/,/<\/Location>/p' apache-rush10.conf)
+  awk -v block="$HEADERS" '{ print } /RewriteRule \. \/rush10\/index\.html \[L\]/ { pending = 1; next } pending && /<\/Directory>/ { print block; pending = 0 }' "$VHOST" > "$VHOST.new"
+  mv "$VHOST.new" "$VHOST"
 fi
 if ! apache2ctl configtest; then
   cp "$BACKUP/$(basename "$VHOST")" "$VHOST"
